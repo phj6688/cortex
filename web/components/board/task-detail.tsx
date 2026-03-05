@@ -14,6 +14,8 @@ import { CostIndicator } from './cost-indicator';
 import { TaskTimeline } from './task-timeline';
 import { TaskActions } from './task-actions';
 import { AODashboard } from './ao-dashboard';
+import { SessionProgress } from './session-progress';
+import { AuditSummary } from './audit-summary';
 import { formatElapsed } from '../../lib/format';
 import type { Task } from '../../stores/task-store';
 
@@ -110,6 +112,12 @@ export function TaskDetail() {
           </a>
         )}
 
+        {/* Audit Summary — only for decomposed tasks */}
+        {isDecomposed(task) && <AuditSummary taskId={task.id} />}
+
+        {/* Session Progress — only for decomposed tasks */}
+        {isDecomposed(task) && <SessionProgress taskId={task.id} />}
+
         {/* Timeline */}
         <div className="mt-4">
           <p className="mb-2 text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--text-secondary)' }}>
@@ -120,4 +128,22 @@ export function TaskDetail() {
       </div>
     </motion.div>
   );
+}
+
+/**
+ * Check if a task is decomposed (has been through auditing/decomposing flow).
+ * @param task - Task to check
+ * @returns Whether the task is decomposed
+ */
+function isDecomposed(task: Task): boolean {
+  const decomposedStates = ['auditing', 'decomposing', 'dispatched', 'running', 'done', 'failed'];
+  if (!decomposedStates.includes(task.state)) return false;
+
+  // Check if brief indicates large complexity
+  try {
+    const brief = JSON.parse(task.brief ?? '{}');
+    return brief.estimated_complexity === 'large';
+  } catch {
+    return false;
+  }
 }

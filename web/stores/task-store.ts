@@ -7,6 +7,7 @@ import { create } from 'zustand';
 
 export type TaskState =
   | 'draft' | 'refined' | 'pending_approval' | 'approved'
+  | 'auditing' | 'decomposing'
   | 'dispatched' | 'running' | 'sleeping' | 'done' | 'failed';
 
 export interface Task {

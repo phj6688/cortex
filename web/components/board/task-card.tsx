@@ -11,6 +11,7 @@ import { StateBadge } from './state-badge';
 import { CostIndicator } from './cost-indicator';
 import { formatElapsed } from '../../lib/format';
 import { useUIStore } from '../../stores/ui-store';
+import { useTaskSessions } from '../../hooks/use-tasks';
 import type { Task } from '../../stores/task-store';
 
 const PRIORITY_LABELS = ['', 'HIGH', 'URGENT'] as const;
@@ -61,6 +62,8 @@ export function TaskCard({ task }: TaskCardProps) {
         {task.title}
       </h3>
 
+      <SessionIndicator task={task} />
+
       <div className="mt-2 flex items-center justify-between">
         <span
           className="text-xs"
@@ -71,5 +74,53 @@ export function TaskCard({ task }: TaskCardProps) {
         <CostIndicator costUsd={task.cost_usd} />
       </div>
     </motion.div>
+  );
+}
+
+function SessionIndicator({ task }: { task: Task }) {
+  // Only show for large tasks in decomposable states
+  let isLarge = false;
+  try {
+    const brief = JSON.parse(task.brief ?? '{}');
+    isLarge = brief.estimated_complexity === 'large';
+  } catch {
+    // Not large
+  }
+
+  const decomposedStates = ['auditing', 'decomposing', 'dispatched', 'running', 'done', 'failed'];
+  if (!isLarge || !decomposedStates.includes(task.state)) return null;
+
+  return <SessionCountBadge taskId={task.id} />;
+}
+
+function SessionCountBadge({ taskId }: { taskId: string }) {
+  const { data: sessions } = useTaskSessions(taskId);
+  if (!sessions || sessions.length === 0) return null;
+
+  const passed = sessions.filter((s: { state: string }) => s.state === 'passed').length;
+  const total = sessions.length;
+
+  return (
+    <div className="mt-1.5 flex items-center gap-1.5">
+      {/* Mini progress bar */}
+      <div
+        className="h-1 flex-1 overflow-hidden rounded-full"
+        style={{ background: 'var(--border)' }}
+      >
+        <div
+          className="h-full rounded-full transition-all"
+          style={{
+            width: `${(passed / total) * 100}%`,
+            background: passed === total ? '#10b981' : 'var(--accent)',
+          }}
+        />
+      </div>
+      <span
+        className="text-[10px] tabular-nums"
+        style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}
+      >
+        {passed}/{total}
+      </span>
+    </div>
   );
 }

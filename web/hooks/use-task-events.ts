@@ -30,11 +30,29 @@ interface CommentAddedEvent {
   data: { taskId: string; commentId: string };
 }
 
+interface SessionStateChangedEvent {
+  type: 'session_state_changed';
+  data: { taskId: string; sessionId: string; state: string };
+}
+
+interface AuditCompleteEvent {
+  type: 'audit_complete';
+  data: { taskId: string; summary: Record<string, number> };
+}
+
+interface VerificationResultEvent {
+  type: 'verification_result';
+  data: { taskId: string; sessionId: string; passed: boolean };
+}
+
 type SSEPayload =
   | TaskCreatedEvent
   | TaskStateChangedEvent
   | CostUpdateEvent
-  | CommentAddedEvent;
+  | CommentAddedEvent
+  | SessionStateChangedEvent
+  | AuditCompleteEvent
+  | VerificationResultEvent;
 
 function parseEvent(data: string): SSEPayload | null {
   try {
@@ -96,6 +114,29 @@ export function useTaskEvents() {
         if (!parsed) return;
         const { taskId } = parsed.data as { taskId: string };
         queryClient.invalidateQueries({ queryKey: ['task', taskId] });
+      });
+
+      es.addEventListener('session_state_changed', (e) => {
+        const parsed = parseEvent(e.data);
+        if (!parsed) return;
+        const { taskId } = parsed.data as { taskId: string };
+        queryClient.invalidateQueries({ queryKey: ['task', taskId] });
+        queryClient.invalidateQueries({ queryKey: ['task-sessions', taskId] });
+      });
+
+      es.addEventListener('audit_complete', (e) => {
+        const parsed = parseEvent(e.data);
+        if (!parsed) return;
+        const { taskId } = parsed.data as { taskId: string };
+        queryClient.invalidateQueries({ queryKey: ['task', taskId] });
+        queryClient.invalidateQueries({ queryKey: ['audit-verdicts', taskId] });
+      });
+
+      es.addEventListener('verification_result', (e) => {
+        const parsed = parseEvent(e.data);
+        if (!parsed) return;
+        const { taskId } = parsed.data as { taskId: string };
+        queryClient.invalidateQueries({ queryKey: ['task-sessions', taskId] });
       });
     }
 

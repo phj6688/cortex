@@ -49,3 +49,19 @@ export function useTaskEvents(taskId: string | null) {
     { enabled: !!taskId },
   );
 }
+
+/** Fetch sessions for a task. */
+export function useTaskSessions(taskId: string | null) {
+  return trpc.task.sessions.useQuery(
+    { taskId: taskId! },
+    { enabled: !!taskId },
+  );
+}
+
+/** Fetch audit verdicts for a task. */
+export function useAuditVerdicts(taskId: string | null) {
+  return trpc.task.auditVerdicts.useQuery(
+    { taskId: taskId! },
+    { enabled: !!taskId },
+  );
+}

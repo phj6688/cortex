@@ -306,6 +306,54 @@ const taskRouter = router({
       return auditQueries.getVerdictsByTask(input.taskId);
     }),
 
+  retrySession: publicProcedure
+    .input(z.object({ sessionId: z.string() }))
+    .mutation(({ input }) => {
+      const session = sessionQueries.getSession(input.sessionId);
+      if (!session) throw new Error('Session not found');
+      if (session.state !== 'failed') {
+        throw new Error(`Cannot retry session in state: ${session.state}`);
+      }
+      sessionQueries.updateSession(input.sessionId, {
+        state: 'ready',
+        retry_count: session.retry_count + 1,
+      });
+      return sessionQueries.getSession(input.sessionId)!;
+    }),
+
+  skipSession: publicProcedure
+    .input(z.object({ sessionId: z.string() }))
+    .mutation(({ input }) => {
+      const session = sessionQueries.getSession(input.sessionId);
+      if (!session) throw new Error('Session not found');
+      if (session.state !== 'failed' && session.state !== 'pending') {
+        throw new Error(`Cannot skip session in state: ${session.state}`);
+      }
+      sessionQueries.updateSession(input.sessionId, {
+        state: 'skipped',
+        completed_at: Math.floor(Date.now() / 1000),
+      });
+      return sessionQueries.getSession(input.sessionId)!;
+    }),
+
+  updateSessionPrompt: publicProcedure
+    .input(z.object({
+      sessionId: z.string(),
+      prompt: z.string().min(1),
+    }))
+    .mutation(({ input }) => {
+      const session = sessionQueries.getSession(input.sessionId);
+      if (!session) throw new Error('Session not found');
+      if (session.state !== 'failed' && session.state !== 'pending' && session.state !== 'ready') {
+        throw new Error(`Cannot edit session in state: ${session.state}`);
+      }
+      sessionQueries.updateSession(input.sessionId, {
+        prompt: input.prompt,
+        state: 'ready',
+      });
+      return sessionQueries.getSession(input.sessionId)!;
+    }),
+
   events: publicProcedure
     .input(z.object({ taskId: z.string(), limit: z.number().optional() }))
     .query(({ input }) => {
