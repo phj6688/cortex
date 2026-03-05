@@ -1,0 +1,75 @@
+-- Cortex V3 — SQLite schema
+-- Execute on startup via migrate.ts (idempotent via IF NOT EXISTS)
+
+CREATE TABLE IF NOT EXISTS projects (
+  id            TEXT PRIMARY KEY,
+  name          TEXT NOT NULL,
+  repo          TEXT NOT NULL,
+  path          TEXT NOT NULL,
+  default_branch TEXT NOT NULL DEFAULT 'main',
+  ao_config_json TEXT,
+  total_cost_usd REAL NOT NULL DEFAULT 0.0,
+  task_count    INTEGER NOT NULL DEFAULT 0,
+  created_at    INTEGER NOT NULL DEFAULT (unixepoch()),
+  updated_at    INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
+CREATE TABLE IF NOT EXISTS tasks (
+  id            TEXT PRIMARY KEY,
+  title         TEXT NOT NULL,
+  brief         TEXT,
+  raw_input     TEXT NOT NULL,
+  project_id    TEXT REFERENCES projects(id),
+  state         TEXT NOT NULL DEFAULT 'draft'
+                CHECK(state IN ('draft','refined','pending_approval',
+                                'approved','dispatched','running',
+                                'sleeping','done','failed')),
+  priority      INTEGER NOT NULL DEFAULT 0,
+  ao_session_id TEXT,
+  ao_branch     TEXT,
+  ao_pr_url     TEXT,
+  failure_reason TEXT,
+  cost_usd      REAL NOT NULL DEFAULT 0.0,
+  token_input   INTEGER NOT NULL DEFAULT 0,
+  token_output  INTEGER NOT NULL DEFAULT 0,
+  parent_task_id TEXT REFERENCES tasks(id),
+  metadata      TEXT DEFAULT '{}',
+  created_at    INTEGER NOT NULL DEFAULT (unixepoch()),
+  approved_at   INTEGER,
+  dispatched_at INTEGER,
+  completed_at  INTEGER,
+  updated_at    INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
+CREATE TABLE IF NOT EXISTS events (
+  id            TEXT PRIMARY KEY,
+  task_id       TEXT NOT NULL REFERENCES tasks(id),
+  event_type    TEXT NOT NULL
+                CHECK(event_type IN ('created','state_changed','brief_refined',
+                                     'signed_off','dispatched','ao_update',
+                                     'pr_opened','ci_passed','ci_failed',
+                                     'done','failed','cost_update',
+                                     'comment','retried','slept','woke')),
+  from_state    TEXT,
+  to_state      TEXT,
+  payload       TEXT DEFAULT '{}',
+  actor         TEXT DEFAULT 'system',
+  created_at    INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
+CREATE TABLE IF NOT EXISTS comments (
+  id            TEXT PRIMARY KEY,
+  task_id       TEXT NOT NULL REFERENCES tasks(id),
+  author        TEXT NOT NULL,
+  body          TEXT NOT NULL,
+  created_at    INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_tasks_state ON tasks(state);
+CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_task_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority DESC, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_events_task ON events(task_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
+CREATE INDEX IF NOT EXISTS idx_comments_task ON comments(task_id, created_at);

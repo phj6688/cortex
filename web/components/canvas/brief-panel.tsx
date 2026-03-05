@@ -1,0 +1,320 @@
+'use client';
+
+/**
+ * Left 40% — chat + brief refinement + sign-off.
+ * Failure cases #4 (LLM timeout) and #5 (no project at sign-off) handled here.
+ * @module components/canvas/brief-panel
+ */
+
+import { useState, useCallback, useRef, type MutableRefObject } from 'react';
+import { toast } from 'sonner';
+import { ChatInput } from '../brief/chat-input';
+import { RefinementStream } from '../brief/refinement-stream';
+import { BriefCard } from '../brief/brief-card';
+import { BriefEditor } from '../brief/brief-editor';
+import { ProjectSelector } from '../brief/project-selector';
+import { SignOffButton } from '../brief/sign-off-button';
+import { EmptyState } from '../shared/empty-state';
+import { streamBriefRefinement, type BriefContent, type BriefCompletePayload } from '../../lib/api';
+import { trpc } from '../../lib/trpc';
+
+type Phase = 'input' | 'streaming' | 'questions' | 'brief' | 'editing' | 'signed-off';
+
+interface BriefPanelProps {
+  chatInputRef?: MutableRefObject<HTMLTextAreaElement | null>;
+}
+
+export function BriefPanel({ chatInputRef }: BriefPanelProps) {
+  const [phase, setPhase] = useState<Phase>('input');
+  const [input, setInput] = useState('');
+  const [tokens, setTokens] = useState('');
+  const [warning, setWarning] = useState<string | null>(null);
+  const [questions, setQuestions] = useState<string[]>([]);
+  const [answers, setAnswers] = useState<string[]>([]);
+  const [brief, setBrief] = useState<BriefContent | null>(null);
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [noProjectWarning, setNoProjectWarning] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const localInputRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const createTask = trpc.task.create.useMutation();
+  const updateState = trpc.task.updateState.useMutation();
+
+  // Merge external ref
+  const setInputRef = useCallback((el: HTMLTextAreaElement | null) => {
+    localInputRef.current = el;
+    if (chatInputRef) chatInputRef.current = el;
+  }, [chatInputRef]);
+
+  const startStream = useCallback(async (text: string, prevAnswers?: string[]) => {
+    setPhase('streaming');
+    setTokens('');
+    setWarning(null);
+    setError(null);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    try {
+      for await (const event of streamBriefRefinement(text, controller.signal, prevAnswers)) {
+        switch (event.type) {
+          case 'token':
+            setTokens(prev => prev + event.content);
+            break;
+          case 'warning':
+            // Failure case #4: 10s warning
+            setWarning(event.content);
+            break;
+          case 'fallback':
+            // Failure case #4: 20s → manual editor
+            setPhase('editing');
+            return;
+          case 'complete': {
+            const payload = event.content as BriefCompletePayload;
+            if (payload.type === 'questions') {
+              setQuestions(payload.content);
+              setPhase('questions');
+            } else {
+              setBrief(payload.content);
+              if (payload.content.suggested_project) {
+                setProjectId(payload.content.suggested_project);
+              }
+              setPhase('brief');
+            }
+            break;
+          }
+          case 'error':
+            setError(event.content);
+            setPhase('input');
+            break;
+        }
+      }
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        setError((err as Error).message);
+        setPhase('input');
+      }
+    } finally {
+      abortRef.current = null;
+    }
+  }, []);
+
+  const handleSubmit = () => {
+    if (!input.trim()) return;
+    startStream(input.trim());
+  };
+
+  const handleAbort = () => {
+    abortRef.current?.abort();
+    setPhase('input');
+  };
+
+  const handleAnswerSubmit = () => {
+    const currentAnswer = input.trim();
+    if (!currentAnswer) return;
+    const newAnswers = [...answers, currentAnswer];
+    setAnswers(newAnswers);
+    setInput('');
+    startStream(input, newAnswers);
+  };
+
+  const handleEditorSave = (edited: BriefContent) => {
+    setBrief(edited);
+    setPhase('brief');
+  };
+
+  const handleSignOff = async () => {
+    if (!brief) return;
+
+    // Failure case #5: no project at sign-off
+    if (!projectId) {
+      setNoProjectWarning(true);
+      return;
+    }
+    setNoProjectWarning(false);
+
+    try {
+      const task = await createTask.mutateAsync({
+        title: brief.title,
+        raw_input: input,
+        brief: JSON.stringify(brief),
+        project_id: projectId,
+      });
+
+      await updateState.mutateAsync({
+        id: task.id,
+        state: 'refined',
+      });
+
+      await updateState.mutateAsync({
+        id: task.id,
+        state: 'pending_approval',
+      });
+
+      toast.success('Signed off — task queued for approval');
+      setPhase('signed-off');
+    } catch (err) {
+      // Failure case #3: SSE disconnect during sign-off
+      toast.error('Sign-off failed — try again');
+      setError((err as Error).message);
+    }
+  };
+
+  const handleReset = () => {
+    setPhase('input');
+    setInput('');
+    setTokens('');
+    setWarning(null);
+    setQuestions([]);
+    setAnswers([]);
+    setBrief(null);
+    setProjectId(null);
+    setError(null);
+    setNoProjectWarning(false);
+    abortRef.current?.abort();
+    abortRef.current = null;
+  };
+
+  return (
+    <div className="flex h-full flex-col p-6">
+      <h2
+        className="mb-4 text-lg font-semibold"
+        style={{ color: 'var(--text-brief)', fontFamily: 'var(--font-mono)' }}
+      >
+        Brief
+      </h2>
+
+      {error && (
+        <div
+          className="mb-3 rounded-lg border px-3 py-2 text-sm"
+          style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
+        >
+          {error}
+        </div>
+      )}
+
+      {phase === 'input' && (
+        <>
+          <ChatInput
+            ref={setInputRef}
+            value={input}
+            onChange={setInput}
+            onSubmit={handleSubmit}
+            placeholder="Describe what you need done..."
+          />
+          {!input && (
+            <EmptyState
+              icon=">"
+              title="Start a brief"
+              description="Describe what you need done and AI will refine it into a structured brief."
+            />
+          )}
+        </>
+      )}
+
+      {phase === 'streaming' && (
+        <>
+          <RefinementStream tokens={tokens} isStreaming warning={warning} />
+          <ChatInput
+            value={input}
+            onChange={setInput}
+            onSubmit={handleSubmit}
+            onAbort={handleAbort}
+            streaming
+            disabled
+          />
+        </>
+      )}
+
+      {phase === 'questions' && (
+        <>
+          <div className="mt-3 space-y-2">
+            {questions.map((q) => (
+              <div
+                key={q}
+                className="rounded-lg border p-3 text-sm"
+                style={{ borderColor: 'var(--border)', color: 'var(--text-brief)' }}
+              >
+                {q}
+              </div>
+            ))}
+          </div>
+          <div className="mt-3">
+            <ChatInput
+              value={input}
+              onChange={setInput}
+              onSubmit={handleAnswerSubmit}
+              placeholder="Answer the question above..."
+            />
+          </div>
+        </>
+      )}
+
+      {phase === 'brief' && brief && (
+        <>
+          <BriefCard brief={brief} />
+          <ProjectSelector value={projectId} onChange={(id) => { setProjectId(id); setNoProjectWarning(false); }} />
+
+          {/* Failure case #5: no project warning */}
+          {noProjectWarning && (
+            <p className="mt-1 text-xs font-medium" style={{ color: 'var(--warning)' }}>
+              Select a project before signing off
+            </p>
+          )}
+
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setPhase('editing')}
+              className="min-h-[44px] rounded border px-3 py-1 text-xs"
+              style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              onClick={handleReset}
+              className="min-h-[44px] rounded border px-3 py-1 text-xs"
+              style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+            >
+              Start Over
+            </button>
+          </div>
+          <SignOffButton
+            onSignOff={handleSignOff}
+            disabled={!brief}
+          />
+        </>
+      )}
+
+      {phase === 'editing' && (
+        <BriefEditor
+          initial={brief ?? undefined}
+          onSave={handleEditorSave}
+          onCancel={() => setPhase(brief ? 'brief' : 'input')}
+        />
+      )}
+
+      {phase === 'signed-off' && (
+        <div className="mt-4 text-center">
+          <div
+            className="rounded-lg p-4"
+            style={{ background: 'var(--accent-glow)', color: 'var(--accent-dim)' }}
+          >
+            <p className="text-sm font-semibold">Signed off — queued for approval</p>
+            <p className="mt-1 text-xs">Task is now pending_approval</p>
+          </div>
+          <button
+            type="button"
+            onClick={handleReset}
+            className="mt-3 min-h-[44px] rounded border px-4 py-1.5 text-xs"
+            style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
+          >
+            New Brief
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

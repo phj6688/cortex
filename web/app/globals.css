@@ -1,0 +1,82 @@
+@import 'tailwindcss';
+
+:root {
+  --bg-primary:     #0a0a0a;
+  --bg-surface:     #141414;
+  --bg-elevated:    #1a1a1a;
+  --bg-brief:       #fafaf7;
+  --accent:         #00ff41;
+  --accent-dim:     #00cc33;
+  --accent-glow:    rgba(0, 255, 65, 0.15);
+  --text-primary:   #f5f5f5;
+  --text-secondary: #a1a1aa;
+  --text-brief:     #1a1a1a;
+  --border:         #262626;
+  --border-focus:   #00ff41;
+  --danger:         #ef4444;
+  --warning:        #f59e0b;
+  --success:        #10b981;
+
+  --font-mono:      'JetBrains Mono', 'SF Mono', monospace;
+  --font-sans:      'Inter', -apple-system, sans-serif;
+
+  --radius-sm:      6px;
+  --radius-md:      10px;
+  --radius-lg:      16px;
+
+  --shadow-card:    0 1px 3px rgba(0,0,0,0.4), 0 0 0 1px var(--border);
+  --shadow-glow:    0 0 20px var(--accent-glow);
+
+  --timing-fast:    150ms;
+  --timing-normal:  250ms;
+  --timing-slow:    400ms;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+/* Brief panel cream background */
+.brief-panel {
+  background: var(--bg-brief);
+  color: var(--text-brief);
+}
+
+/* Pulse animation for running state */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 var(--accent-glow); }
+  50% { box-shadow: 0 0 12px 4px var(--accent-glow); }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Responsive: 1024px minimum, scale to 2560px */
+@media (max-width: 1024px) {
+  .brief-panel { min-width: 320px; }
+}
+
+/* cmdk overrides */
+[cmdk-input] {
+  caret-color: var(--accent);
+}
+[cmdk-item][data-selected='true'] {
+  background: rgba(255, 255, 255, 0.05);
+}
