@@ -359,6 +359,59 @@ const taskRouter = router({
     .query(({ input }) => {
       return eventQueries.getEventsForTask(input.taskId, input.limit);
     }),
+
+  // Test-only: seed sessions and verdicts for E2E tests
+  _seedSession: publicProcedure
+    .input(z.object({
+      id: z.string(),
+      task_id: z.string(),
+      session_number: z.number(),
+      title: z.string(),
+      prompt: z.string().optional(),
+      state: z.enum(['pending', 'auditing', 'ready', 'dispatched', 'running', 'verifying', 'passed', 'failed', 'skipped']).optional(),
+      deliverables: z.string().optional(),
+      verification: z.string().optional(),
+      regression: z.string().optional(),
+      anti_patterns: z.string().optional(),
+    }))
+    .mutation(({ input }) => {
+      if (env.NODE_ENV === 'production') throw new Error('Not available in production');
+      sessionQueries.insertSession(input);
+      return sessionQueries.getSession(input.id)!;
+    }),
+
+  _seedVerdict: publicProcedure
+    .input(z.object({
+      id: z.string(),
+      task_id: z.string(),
+      file_path: z.string(),
+      verdict: z.enum(['keep', 'patch', 'rewrite', 'delete', 'create']),
+      reason: z.string(),
+      patch_details: z.string().nullable().optional(),
+    }))
+    .mutation(({ input }) => {
+      if (env.NODE_ENV === 'production') throw new Error('Not available in production');
+      auditQueries.insertVerdict(input);
+      return { ok: true };
+    }),
+
+  _updateSession: publicProcedure
+    .input(z.object({
+      id: z.string(),
+      state: z.enum(['pending', 'auditing', 'ready', 'dispatched', 'running', 'verifying', 'passed', 'failed', 'skipped']).optional(),
+      verification_output: z.string().nullable().optional(),
+      failure_reason: z.string().nullable().optional(),
+      cost_usd: z.number().optional(),
+      retry_count: z.number().optional(),
+      started_at: z.number().nullable().optional(),
+      completed_at: z.number().nullable().optional(),
+    }))
+    .mutation(({ input }) => {
+      if (env.NODE_ENV === 'production') throw new Error('Not available in production');
+      const { id, ...updates } = input;
+      sessionQueries.updateSession(id, updates);
+      return sessionQueries.getSession(id)!;
+    }),
 });
 
 const projectRouter = router({
