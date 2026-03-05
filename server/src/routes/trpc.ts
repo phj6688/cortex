@@ -18,6 +18,8 @@ import {
   type TaskState,
 } from '../domain/task-machine.js';
 import { publishTaskCreated, publishTaskStateChanged } from '../services/event-bus.js';
+import { dispatch as aoDispatch } from '../services/ao-dispatch.js';
+import { startPoller } from '../services/ao-status-poller.js';
 
 export interface TRPCContext {
   req: FastifyRequest;
@@ -160,6 +162,61 @@ const taskRouter = router({
 
       publishTaskStateChanged(input.id, from, to);
       return updated;
+    }),
+
+  dispatch: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ input }) => {
+      const task = taskQueries.getTask(input.id);
+      if (!task) throw new Error('Task not found');
+      if (task.state !== 'approved') {
+        throw new Error(`Cannot dispatch task in state: ${task.state}`);
+      }
+
+      try {
+        const result = await aoDispatch(task);
+
+        const updated = taskQueries.updateTask(input.id, {
+          state: 'dispatched',
+          ao_session_id: result.sessionId,
+          ao_branch: result.branch,
+          dispatched_at: Math.floor(Date.now() / 1000),
+        })!;
+
+        eventQueries.createEvent({
+          id: eventId(),
+          task_id: input.id,
+          event_type: 'dispatched',
+          from_state: 'approved',
+          to_state: 'dispatched',
+          payload: JSON.stringify({ sessionId: result.sessionId, branch: result.branch }),
+          actor: 'system',
+        });
+
+        publishTaskStateChanged(input.id, 'approved', 'dispatched');
+        startPoller();
+        return updated;
+      } catch (err) {
+        // Dispatch failed — mark task as failed
+        taskQueries.updateTask(input.id, {
+          state: 'failed',
+          failure_reason: (err as Error).message,
+          completed_at: Math.floor(Date.now() / 1000),
+        });
+
+        eventQueries.createEvent({
+          id: eventId(),
+          task_id: input.id,
+          event_type: 'failed',
+          from_state: 'approved',
+          to_state: 'failed',
+          payload: JSON.stringify({ error: (err as Error).message }),
+          actor: 'system',
+        });
+
+        publishTaskStateChanged(input.id, 'approved', 'failed');
+        throw new Error(`Dispatch failed: ${(err as Error).message}`);
+      }
     }),
 
   events: publicProcedure

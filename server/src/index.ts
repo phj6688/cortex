@@ -13,6 +13,7 @@ import { appRouter, type TRPCContext } from './routes/trpc.js';
 import { registerHealthRoute } from './routes/health.js';
 import { registerSSERoute } from './routes/sse.js';
 import { registerBriefRoutes } from './routes/briefs.js';
+import { registerAoWebhookRoute } from './routes/ao-webhook.js';
 
 const fastify = Fastify({
   logger: {
@@ -39,6 +40,7 @@ await fastify.register(fastifyTRPCPlugin, {
 await registerHealthRoute(fastify);
 await registerSSERoute(fastify);
 await registerBriefRoutes(fastify);
+await registerAoWebhookRoute(fastify);
 
 fastify.get('/', (_req, reply) => {
   return reply.redirect(env.WEB_URL);
