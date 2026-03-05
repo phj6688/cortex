@@ -15,7 +15,10 @@ services:
     volumes:
       - cortex-v3-data:/data
       - ./ao-config:/ao-config
-    depends_on: [agent-orchestrator]
+    depends_on:
+      agent-orchestrator:
+        condition: service_started
+        required: false
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3481/health"]
@@ -31,6 +34,7 @@ services:
       - ao-data:/root/.agent-orchestrator
       - ao-worktrees:/root/.worktrees
     restart: unless-stopped
+    profiles: ["full"]
 
 volumes:
   cortex-v3-data:

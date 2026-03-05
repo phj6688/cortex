@@ -1,10 +1,16 @@
 FROM node:22-slim AS builder
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY server/package.json server/
-COPY web/package.json web/
+COPY server/package.json server/tsconfig.json server/tsup.config.ts server/
+COPY web/package.json web/next.config.ts web/postcss.config.mjs web/tsconfig.json web/
 RUN corepack enable && pnpm install --frozen-lockfile
-COPY . .
+COPY server/src server/src
+COPY web/app web/app
+COPY web/components web/components
+COPY web/hooks web/hooks
+COPY web/stores web/stores
+COPY web/lib web/lib
+COPY web/public web/public
 RUN pnpm --filter @cortex-v3/server build && pnpm --filter @cortex-v3/web build
 
 FROM node:22-slim AS runner
