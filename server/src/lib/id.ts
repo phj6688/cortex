@@ -24,3 +24,13 @@ export function eventId(): string {
 export function commentId(): string {
   return `cmt_${nanoid(8)}`;
 }
+
+/** @returns A new session ID (ses_xxxxxxxx) */
+export function sessionId(): string {
+  return `ses_${nanoid(8)}`;
+}
+
+/** @returns A new audit verdict ID (aud_xxxxxxxx) */
+export function auditId(): string {
+  return `aud_${nanoid(8)}`;
+}

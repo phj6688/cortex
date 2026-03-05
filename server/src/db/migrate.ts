@@ -32,7 +32,8 @@ CREATE TABLE IF NOT EXISTS tasks (
   project_id    TEXT REFERENCES projects(id),
   state         TEXT NOT NULL DEFAULT 'draft'
                 CHECK(state IN ('draft','refined','pending_approval',
-                                'approved','dispatched','running',
+                                'approved','auditing','decomposing',
+                                'dispatched','running',
                                 'sleeping','done','failed')),
   priority      INTEGER NOT NULL DEFAULT 0,
   ao_session_id TEXT,
@@ -82,6 +83,44 @@ CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority DESC, created_at
 CREATE INDEX IF NOT EXISTS idx_events_task ON events(task_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
 CREATE INDEX IF NOT EXISTS idx_comments_task ON comments(task_id, created_at);
+
+CREATE TABLE IF NOT EXISTS task_sessions (
+  id              TEXT PRIMARY KEY,
+  task_id         TEXT NOT NULL REFERENCES tasks(id),
+  session_number  INTEGER NOT NULL,
+  title           TEXT NOT NULL,
+  prompt          TEXT NOT NULL DEFAULT '',
+  deliverables    TEXT NOT NULL DEFAULT '[]',
+  verification    TEXT NOT NULL DEFAULT '[]',
+  regression      TEXT NOT NULL DEFAULT '[]',
+  anti_patterns   TEXT NOT NULL DEFAULT '[]',
+  state           TEXT NOT NULL DEFAULT 'pending'
+                  CHECK(state IN ('pending','auditing','ready','dispatched',
+                                  'running','verifying','passed','failed','skipped')),
+  ao_session_id   TEXT,
+  audit_report    TEXT,
+  verification_output TEXT,
+  failure_reason  TEXT,
+  cost_usd        REAL NOT NULL DEFAULT 0.0,
+  retry_count     INTEGER NOT NULL DEFAULT 0,
+  created_at      INTEGER NOT NULL DEFAULT (unixepoch()),
+  started_at      INTEGER,
+  completed_at    INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS audit_verdicts (
+  id              TEXT PRIMARY KEY,
+  task_id         TEXT NOT NULL REFERENCES tasks(id),
+  file_path       TEXT NOT NULL,
+  verdict         TEXT NOT NULL CHECK(verdict IN ('keep','patch','rewrite','delete','create')),
+  reason          TEXT NOT NULL,
+  patch_details   TEXT,
+  created_at      INTEGER NOT NULL DEFAULT (unixepoch())
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_task ON task_sessions(task_id, session_number);
+CREATE INDEX IF NOT EXISTS idx_sessions_state ON task_sessions(state);
+CREATE INDEX IF NOT EXISTS idx_audits_task ON audit_verdicts(task_id);
 `;
 
 /**

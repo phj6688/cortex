@@ -13,6 +13,9 @@ export type SSEEventType =
   | 'ao_update'
   | 'cost_update'
   | 'comment_added'
+  | 'session_state_changed'
+  | 'audit_complete'
+  | 'verification_result'
   | 'heartbeat';
 
 export interface SSEEvent {
@@ -95,6 +98,35 @@ export function publishCostUpdate(taskId: string, costUsd: number): void {
  */
 export function publishCommentAdded(taskId: string, commentId: string): void {
   emit('comment_added', { taskId, commentId });
+}
+
+/**
+ * Publish session state change.
+ * @param taskId - Parent task ID
+ * @param sessionId - Session ID
+ * @param state - New session state
+ */
+export function publishSessionStateChanged(taskId: string, sessionId: string, state: string): void {
+  emit('session_state_changed', { taskId, sessionId, state });
+}
+
+/**
+ * Publish audit completion.
+ * @param taskId - Task ID
+ * @param summary - Audit summary counts
+ */
+export function publishAuditComplete(taskId: string, summary: Record<string, number>): void {
+  emit('audit_complete', { taskId, summary });
+}
+
+/**
+ * Publish verification result.
+ * @param taskId - Task ID
+ * @param sessionId - Session ID
+ * @param passed - Whether verification passed
+ */
+export function publishVerificationResult(taskId: string, sessionId: string, passed: boolean): void {
+  emit('verification_result', { taskId, sessionId, passed });
 }
 
 /** Start 30s heartbeat timer */

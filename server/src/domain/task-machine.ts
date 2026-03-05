@@ -9,6 +9,8 @@ export const TASK_STATES = [
   'refined',
   'pending_approval',
   'approved',
+  'auditing',
+  'decomposing',
   'dispatched',
   'running',
   'sleeping',
@@ -18,12 +20,14 @@ export const TASK_STATES = [
 
 export type TaskState = (typeof TASK_STATES)[number];
 
-/** Valid state transitions — spec-exact */
+/** Valid state transitions — spec-exact + decomposer states */
 const VALID_TRANSITIONS: Record<TaskState, readonly TaskState[]> = {
   draft:            ['refined', 'sleeping'],
   refined:          ['pending_approval', 'draft', 'sleeping'],
   pending_approval: ['approved', 'draft', 'sleeping'],
-  approved:         ['dispatched', 'draft'],
+  approved:         ['auditing', 'dispatched', 'draft'],
+  auditing:         ['decomposing', 'failed'],
+  decomposing:      ['dispatched', 'failed'],
   dispatched:       ['running', 'failed'],
   running:          ['done', 'failed', 'sleeping'],
   sleeping:         ['draft'],

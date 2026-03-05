@@ -161,13 +161,14 @@ describe('task-machine', () => {
   });
 
   describe('TASK_STATES', () => {
-    it('contains exactly 9 states', () => {
-      expect(TASK_STATES).toHaveLength(9);
+    it('contains exactly 11 states', () => {
+      expect(TASK_STATES).toHaveLength(11);
     });
 
     it('includes all expected states', () => {
       const expected: TaskState[] = [
         'draft', 'refined', 'pending_approval', 'approved',
+        'auditing', 'decomposing',
         'dispatched', 'running', 'sleeping', 'done', 'failed',
       ];
       for (const state of expected) {

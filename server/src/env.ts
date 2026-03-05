@@ -16,6 +16,11 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   WEB_URL: z.string().default('http://localhost:9301'),
+  DECOMPOSER_ENABLED: z.coerce.boolean().default(true),
+  DECOMPOSER_MAX_SESSIONS: z.coerce.number().min(1).max(12).default(8),
+  DECOMPOSER_AUDIT_TIMEOUT: z.coerce.number().default(600_000),
+  DECOMPOSER_SESSION_TIMEOUT: z.coerce.number().default(3_600_000),
+  DECOMPOSER_MAX_RETRIES: z.coerce.number().min(0).max(5).default(2),
 });
 
 const parsed = envSchema.safeParse(process.env);

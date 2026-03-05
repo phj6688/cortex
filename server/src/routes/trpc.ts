@@ -7,6 +7,7 @@ import { initTRPC } from '@trpc/server';
 import { z } from 'zod';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import * as taskQueries from '../db/queries/tasks.js';
+import type { TaskRow } from '../db/queries/tasks.js';
 import * as projectQueries from '../db/queries/projects.js';
 import * as eventQueries from '../db/queries/events.js';
 import * as metricsQueries from '../db/queries/metrics.js';
@@ -17,9 +18,20 @@ import {
   checkGuard,
   type TaskState,
 } from '../domain/task-machine.js';
-import { publishTaskCreated, publishTaskStateChanged } from '../services/event-bus.js';
+import {
+  publishTaskCreated,
+  publishTaskStateChanged,
+  publishAuditComplete,
+} from '../services/event-bus.js';
 import { dispatch as aoDispatch } from '../services/ao-dispatch.js';
 import { startPoller } from '../services/ao-status-poller.js';
+import { env } from '../env.js';
+import * as sessionQueries from '../db/queries/sessions.js';
+import * as auditQueries from '../db/queries/audits.js';
+import { runAudit } from '../services/audit-service.js';
+import { decompose } from '../services/decomposer-service.js';
+import { executeSessionSequence } from '../services/session-executor.js';
+import { sessionId, auditId } from '../lib/id.js';
 
 export interface TRPCContext {
   req: FastifyRequest;
@@ -32,6 +44,7 @@ const publicProcedure = t.procedure;
 
 const taskStateSchema = z.enum([
   'draft', 'refined', 'pending_approval', 'approved',
+  'auditing', 'decomposing',
   'dispatched', 'running', 'sleeping', 'done', 'failed',
 ]);
 
@@ -219,6 +232,80 @@ const taskRouter = router({
       }
     }),
 
+  approve: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ input }) => {
+      const task = taskQueries.getTask(input.id);
+      if (!task) throw new Error('Task not found');
+      if (task.state !== 'pending_approval') {
+        throw new Error(`Cannot approve task in state: ${task.state}`);
+      }
+      if (!task.brief) throw new Error('Cannot approve task without a brief');
+
+      // Transition to approved
+      taskQueries.updateTask(input.id, {
+        state: 'approved',
+        approved_at: Math.floor(Date.now() / 1000),
+      });
+      eventQueries.createEvent({
+        id: eventId(),
+        task_id: input.id,
+        event_type: 'signed_off',
+        from_state: 'pending_approval',
+        to_state: 'approved',
+        actor: 'human',
+      });
+      publishTaskStateChanged(input.id, 'pending_approval', 'approved');
+
+      // Check complexity for decomposer flow
+      let briefObj: { estimated_complexity?: string } | null = null;
+      try {
+        briefObj = JSON.parse(task.brief);
+      } catch {
+        briefObj = null;
+      }
+
+      const isLarge = briefObj?.estimated_complexity === 'large' && env.DECOMPOSER_ENABLED;
+
+      if (isLarge && task.project_id) {
+        // Enter decomposer flow (async — SSE pushes updates)
+        const freshTask = taskQueries.getTask(input.id)!;
+        handleDecomposerFlow(freshTask).catch((err) => {
+          // Fallback: mark failed if decomposer crashes
+          taskQueries.updateTask(input.id, {
+            state: 'failed',
+            failure_reason: `Decomposer error: ${(err as Error).message}`,
+            completed_at: Math.floor(Date.now() / 1000),
+          });
+          publishTaskStateChanged(input.id, freshTask.state, 'failed');
+        });
+        return taskQueries.getTask(input.id)!;
+      }
+
+      // Non-large: return approved task (dispatch separately via task.dispatch)
+      return taskQueries.getTask(input.id)!;
+    }),
+
+  sessions: publicProcedure
+    .input(z.object({ taskId: z.string() }))
+    .query(({ input }) => {
+      return sessionQueries.getSessionsByTask(input.taskId);
+    }),
+
+  sessionDetail: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .query(({ input }) => {
+      const session = sessionQueries.getSession(input.id);
+      if (!session) throw new Error('Session not found');
+      return session;
+    }),
+
+  auditVerdicts: publicProcedure
+    .input(z.object({ taskId: z.string() }))
+    .query(({ input }) => {
+      return auditQueries.getVerdictsByTask(input.taskId);
+    }),
+
   events: publicProcedure
     .input(z.object({ taskId: z.string(), limit: z.number().optional() }))
     .query(({ input }) => {
@@ -284,6 +371,72 @@ const metricsRouter = router({
       return metricsQueries.getProjectMetrics(input.projectId);
     }),
 });
+
+/**
+ * Handle the decomposer flow for large tasks.
+ * Runs audit → decompose → create sessions → execute sequence.
+ * @param task - The approved task
+ */
+async function handleDecomposerFlow(task: TaskRow): Promise<void> {
+  // 1. Audit phase
+  taskQueries.updateTask(task.id, { state: 'auditing' });
+  publishTaskStateChanged(task.id, 'approved', 'auditing');
+
+  const project = projectQueries.getProject(task.project_id!)!;
+  const auditReport = await runAudit(task, project);
+
+  // Store verdicts if audit succeeded
+  if (auditReport) {
+    for (const v of auditReport.verdicts) {
+      auditQueries.insertVerdict({
+        id: auditId(),
+        task_id: task.id,
+        file_path: v.file_path,
+        verdict: v.verdict,
+        reason: v.reason,
+        patch_details: v.patch_details,
+      });
+    }
+    publishAuditComplete(task.id, auditReport.summary as unknown as Record<string, number>);
+  }
+
+  // 2. Decomposition phase
+  taskQueries.updateTask(task.id, { state: 'decomposing' });
+  publishTaskStateChanged(task.id, 'auditing', 'decomposing');
+
+  let sessions;
+  try {
+    sessions = await decompose(task.brief!, auditReport, project);
+  } catch (err) {
+    // Decomposition failed — fall back to single direct dispatch
+    taskQueries.updateTask(task.id, {
+      state: 'failed',
+      failure_reason: `Decomposition failed: ${(err as Error).message}`,
+      completed_at: Math.floor(Date.now() / 1000),
+    });
+    publishTaskStateChanged(task.id, 'decomposing', 'failed');
+    return;
+  }
+
+  // 3. Create session records
+  for (const s of sessions) {
+    sessionQueries.insertSession({
+      id: sessionId(),
+      task_id: task.id,
+      session_number: s.session_number,
+      title: s.title,
+      deliverables: JSON.stringify(s.deliverables),
+      verification: JSON.stringify(s.verification),
+      regression: JSON.stringify(s.regression),
+      anti_patterns: JSON.stringify(s.anti_patterns),
+      state: 'pending',
+    });
+  }
+
+  // 4. Execute sequence
+  const freshTask = taskQueries.getTask(task.id)!;
+  await executeSessionSequence(freshTask, sessions);
+}
 
 export const appRouter = router({
   task: taskRouter,
