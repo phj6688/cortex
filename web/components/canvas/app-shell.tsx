@@ -13,12 +13,14 @@ import { CommandBar } from './command-bar';
 import { TopBar } from '../layout/top-bar';
 import { ShortcutsOverlay } from '../layout/shortcuts-overlay';
 import { ErrorBoundary } from '../shared/error-boundary';
+import { ProjectWizard } from '../projects/project-wizard';
 import { useKeyboard } from '../../hooks/use-keyboard';
 import { useConnectionStore } from '../../stores/connection-store';
 
 export function AppShell() {
   const [commandBarOpen, setCommandBarOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [projectWizardOpen, setProjectWizardOpen] = useState(false);
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Register service worker
@@ -90,12 +92,17 @@ export function AppShell() {
         onClose={() => setCommandBarOpen(false)}
         onFocusChatInput={focusChatInput}
         onToggleShortcuts={toggleShortcuts}
+        onOpenProjectWizard={() => setProjectWizardOpen(true)}
       />
 
       <ShortcutsOverlay
         open={shortcutsOpen}
         onClose={() => setShortcutsOpen(false)}
       />
+
+      {projectWizardOpen && (
+        <ProjectWizard onClose={() => setProjectWizardOpen(false)} />
+      )}
     </>
   );
 }

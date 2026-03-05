@@ -11,6 +11,7 @@ import * as projectQueries from '../db/queries/projects.js';
 import * as eventQueries from '../db/queries/events.js';
 import * as metricsQueries from '../db/queries/metrics.js';
 import { taskId, projectId, eventId } from '../lib/id.js';
+import { addProjectToAOConfig } from '../services/ao-config.js';
 import {
   canTransition,
   checkGuard,
@@ -184,19 +185,34 @@ const projectRouter = router({
   create: publicProcedure
     .input(z.object({
       name: z.string().min(1),
-      repo: z.string().min(1),
+      repo: z.string().min(1).regex(/^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/, 'Must be org/repo format'),
       path: z.string().min(1),
       default_branch: z.string().optional(),
     }))
     .mutation(({ input }) => {
       const id = projectId();
-      return projectQueries.createProject({
+      const project = projectQueries.createProject({
         id,
         name: input.name,
         repo: input.repo,
         path: input.path,
         default_branch: input.default_branch,
       });
+
+      // Write to AO config YAML
+      const key = input.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      try {
+        addProjectToAOConfig(key, {
+          name: input.name,
+          path: input.path,
+          repo: input.repo,
+          defaultBranch: input.default_branch ?? 'main',
+        });
+      } catch {
+        // Non-fatal — project created in DB even if YAML write fails
+      }
+
+      return project;
     }),
 });
 

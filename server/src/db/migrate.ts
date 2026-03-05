@@ -104,4 +104,14 @@ export function migrate(logger: MinimalLogger): void {
   logger.info('Running database migration...');
   db.exec(SCHEMA);
   logger.info('Database migration complete — tables: projects, tasks, events, comments');
+
+  // Seed ops-homelab project on first boot
+  const seeded = db.prepare('SELECT id FROM projects WHERE id = ?').get('prj_ops_homelab');
+  if (!seeded) {
+    db.prepare(`
+      INSERT INTO projects (id, name, repo, path, default_branch)
+      VALUES (?, ?, ?, ?, ?)
+    `).run('prj_ops_homelab', 'Homelab Ops', 'phj6688/homelab-ops', '~/homelab', 'main');
+    logger.info('Seeded default project: ops-homelab');
+  }
 }

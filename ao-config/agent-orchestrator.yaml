@@ -1,0 +1,32 @@
+dataDir: ~/.agent-orchestrator
+worktreeDir: ~/.worktrees
+port: 3000
+
+defaults:
+  runtime: process
+  agent: claude-code
+  workspace: worktree
+  notifiers: [webhook]
+
+projects:
+  ops-homelab:
+    name: Homelab Ops
+    path: ~/homelab
+    repo: phj6688/homelab-ops
+    defaultBranch: main
+    agentRules: |
+      This is an operations/infrastructure task, not feature development.
+      Do not open a PR unless explicitly asked.
+      Report findings as a structured summary.
+      SSH access available to 100.115.215.121.
+
+notifiers:
+  webhook:
+    plugin: webhook
+    to: http://cortex:3481/api/ao-events
+
+notificationRouting:
+  urgent: [webhook]
+  action: [webhook]
+  warning: [webhook]
+  info: [webhook]

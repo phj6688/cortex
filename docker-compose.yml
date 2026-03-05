@@ -1,0 +1,38 @@
+services:
+  cortex-v3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports: ["3481:3481"]
+    environment:
+      DATABASE_PATH: /data/cortex.db
+      AO_BASE_URL: http://agent-orchestrator:3000
+      AO_CONFIG_PATH: /ao-config/agent-orchestrator.yaml
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      PORT: "3481"
+      NODE_ENV: production
+      LOG_LEVEL: info
+    volumes:
+      - cortex-v3-data:/data
+      - ./ao-config:/ao-config
+    depends_on: [agent-orchestrator]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3481/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  agent-orchestrator:
+    image: composio/agent-orchestrator:latest
+    ports: ["3000:3000"]
+    volumes:
+      - ./ao-config/agent-orchestrator.yaml:/root/.agent-orchestrator/agent-orchestrator.yaml
+      - ao-data:/root/.agent-orchestrator
+      - ao-worktrees:/root/.worktrees
+    restart: unless-stopped
+
+volumes:
+  cortex-v3-data:
+  ao-data:
+  ao-worktrees:
