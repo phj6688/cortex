@@ -37,7 +37,6 @@ services:
       - ao-data:/home/ao-agent/.agent-orchestrator
       - ao-worktrees:/home/ao-agent/.worktrees
       - /home/lumo/cortex-v3:/home/ao-agent/repos/cortex-v3
-      - /home/lumo/.ssh:/root/.ssh:ro
       - /home/peyman/.claude:/tmp/claude-auth:ro
     restart: unless-stopped
     healthcheck:

@@ -268,7 +268,7 @@ export async function send(sessionId: string, message: string): Promise<void> {
     return;
   }
 
-  const res = await fetch(`${aoBaseUrl}/api/sessions/${sessionId}/message`, {
+  const res = await fetch(`${aoBaseUrl}/api/sessions/${sessionId}/send`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message }),
