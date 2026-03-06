@@ -34,9 +34,9 @@ services:
       GITHUB_TOKEN: ${GITHUB_TOKEN}
     volumes:
       - ./ao-config/agent-orchestrator.yaml:/app/agent-orchestrator.yaml
-      - ao-data:/root/.agent-orchestrator
-      - ao-worktrees:/root/.worktrees
-      - /home/lumo/cortex-v3:/root/repos/cortex-v3
+      - ao-data:/home/ao-agent/.agent-orchestrator
+      - ao-worktrees:/home/ao-agent/.worktrees
+      - /home/lumo/cortex-v3:/home/ao-agent/repos/cortex-v3
       - /home/lumo/.ssh:/root/.ssh:ro
       - /home/peyman/.claude:/tmp/claude-auth:ro
     restart: unless-stopped

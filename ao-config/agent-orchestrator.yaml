@@ -1,5 +1,5 @@
-dataDir: ~/.agent-orchestrator
-worktreeDir: ~/.worktrees
+dataDir: /home/ao-agent/.agent-orchestrator
+worktreeDir: /home/ao-agent/.worktrees
 port: 3000
 
 defaults:
@@ -11,11 +11,11 @@ defaults:
 projects:
   ops-homelab:
     name: Homelab Ops
-    path: /root/repos/homelab-ops
+    path: /home/ao-agent/repos/homelab-ops
     repo: phj6688/homelab-ops
     defaultBranch: main
     agentConfig:
-      permissions: default
+      permissions: skip
     agentRules: |
       This is an operations/infrastructure task, not feature development.
       Do not open a PR unless explicitly asked.
@@ -23,11 +23,11 @@ projects:
 
   cortex-v3:
     name: Cortex V3
-    path: /root/repos/cortex-v3
+    path: /home/ao-agent/repos/cortex-v3
     repo: phj6688/cortex
     defaultBranch: master
     agentConfig:
-      permissions: default
+      permissions: skip
     agentRules: |
       Read CLAUDE.md in the project root first.
       TypeScript strict mode. No any. No ts-ignore.
