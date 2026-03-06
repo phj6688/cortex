@@ -1,0 +1,3 @@
+[submodule "ao-service"]
+	path = ao-service
+	url = https://github.com/ComposioHQ/agent-orchestrator.git

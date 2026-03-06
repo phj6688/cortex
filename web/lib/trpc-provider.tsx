@@ -11,6 +11,8 @@ import { useState } from 'react';
 import { trpc } from './trpc';
 
 function getBaseUrl(): string {
+  const envUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (envUrl) return envUrl;
   if (typeof window !== 'undefined') return '';
   return process.env.BACKEND_URL ?? 'http://localhost:3481';
 }

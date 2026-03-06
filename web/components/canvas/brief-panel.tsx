@@ -33,6 +33,7 @@ export function BriefPanel({ chatInputRef }: BriefPanelProps) {
   const [answers, setAnswers] = useState<string[]>([]);
   const [brief, setBrief] = useState<BriefContent | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
+  const [originalInput, setOriginalInput] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [noProjectWarning, setNoProjectWarning] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -40,6 +41,7 @@ export function BriefPanel({ chatInputRef }: BriefPanelProps) {
 
   const createTask = trpc.task.create.useMutation();
   const updateState = trpc.task.updateState.useMutation();
+  const approveTask = trpc.task.approve.useMutation();
 
   // Merge external ref
   const setInputRef = useCallback((el: HTMLTextAreaElement | null) => {
@@ -102,6 +104,7 @@ export function BriefPanel({ chatInputRef }: BriefPanelProps) {
 
   const handleSubmit = () => {
     if (!input.trim()) return;
+    setOriginalInput(input.trim());
     startStream(input.trim());
   };
 
@@ -137,7 +140,7 @@ export function BriefPanel({ chatInputRef }: BriefPanelProps) {
     try {
       const task = await createTask.mutateAsync({
         title: brief.title,
-        raw_input: input,
+        raw_input: originalInput,
         brief: JSON.stringify(brief),
         project_id: projectId,
       });
@@ -152,7 +155,9 @@ export function BriefPanel({ chatInputRef }: BriefPanelProps) {
         state: 'pending_approval',
       });
 
-      toast.success('Signed off — task queued for approval');
+      await approveTask.mutateAsync({ id: task.id });
+
+      toast.success('Signed off — task approved');
       setPhase('signed-off');
     } catch (err) {
       // Failure case #3: SSE disconnect during sign-off
@@ -164,6 +169,7 @@ export function BriefPanel({ chatInputRef }: BriefPanelProps) {
   const handleReset = () => {
     setPhase('input');
     setInput('');
+    setOriginalInput('');
     setTokens('');
     setWarning(null);
     setQuestions([]);

@@ -7,8 +7,8 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { useConnectionStore } from '../stores/connection-store';
+import { trpc } from '../lib/trpc';
 
 interface TaskCreatedEvent {
   type: 'task_created';
@@ -62,9 +62,11 @@ function parseEvent(data: string): SSEPayload | null {
   }
 }
 
+const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
+
 export function useTaskEvents() {
   const reconnectDelay = useRef(100);
-  const queryClient = useQueryClient();
+  const utils = trpc.useUtils();
   const setStatus = useConnectionStore((s) => s.setStatus);
 
   useEffect(() => {
@@ -73,7 +75,7 @@ export function useTaskEvents() {
 
     function connect() {
       if (destroyed) return;
-      es = new EventSource('/api/events');
+      es = new EventSource(`${apiBase}/api/events`);
 
       es.onopen = () => {
         reconnectDelay.current = 100;
@@ -93,50 +95,50 @@ export function useTaskEvents() {
         const parsed = parseEvent(e.data);
         if (!parsed) return;
         const { taskId } = parsed.data as { taskId: string };
-        queryClient.invalidateQueries({ queryKey: ['tasks'] });
-        queryClient.invalidateQueries({ queryKey: ['task', taskId] });
+        utils.task.list.invalidate();
+        utils.task.get.invalidate({ id: taskId });
       });
 
       es.addEventListener('task_created', () => {
-        queryClient.invalidateQueries({ queryKey: ['tasks'] });
+        utils.task.list.invalidate();
       });
 
       es.addEventListener('cost_update', (e) => {
         const parsed = parseEvent(e.data);
         if (!parsed) return;
         const { taskId } = parsed.data as { taskId: string };
-        queryClient.invalidateQueries({ queryKey: ['task', taskId] });
-        queryClient.invalidateQueries({ queryKey: ['metrics'] });
+        utils.task.get.invalidate({ id: taskId });
+        utils.metrics.summary.invalidate();
       });
 
       es.addEventListener('comment_added', (e) => {
         const parsed = parseEvent(e.data);
         if (!parsed) return;
         const { taskId } = parsed.data as { taskId: string };
-        queryClient.invalidateQueries({ queryKey: ['task', taskId] });
+        utils.task.get.invalidate({ id: taskId });
       });
 
       es.addEventListener('session_state_changed', (e) => {
         const parsed = parseEvent(e.data);
         if (!parsed) return;
         const { taskId } = parsed.data as { taskId: string };
-        queryClient.invalidateQueries({ queryKey: ['task', taskId] });
-        queryClient.invalidateQueries({ queryKey: ['task-sessions', taskId] });
+        utils.task.get.invalidate({ id: taskId });
+        utils.task.sessions.invalidate({ taskId });
       });
 
       es.addEventListener('audit_complete', (e) => {
         const parsed = parseEvent(e.data);
         if (!parsed) return;
         const { taskId } = parsed.data as { taskId: string };
-        queryClient.invalidateQueries({ queryKey: ['task', taskId] });
-        queryClient.invalidateQueries({ queryKey: ['audit-verdicts', taskId] });
+        utils.task.get.invalidate({ id: taskId });
+        utils.task.auditVerdicts.invalidate({ taskId });
       });
 
       es.addEventListener('verification_result', (e) => {
         const parsed = parseEvent(e.data);
         if (!parsed) return;
         const { taskId } = parsed.data as { taskId: string };
-        queryClient.invalidateQueries({ queryKey: ['task-sessions', taskId] });
+        utils.task.sessions.invalidate({ taskId });
       });
     }
 
@@ -146,5 +148,5 @@ export function useTaskEvents() {
       es?.close();
       setStatus('disconnected');
     };
-  }, [queryClient, setStatus]);
+  }, [utils, setStatus]);
 }

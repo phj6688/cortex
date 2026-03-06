@@ -30,12 +30,14 @@ export type BriefCompletePayload =
  * @param answers - Previous answers to clarifying questions
  * @yields BriefStreamEvent objects
  */
+const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
+
 export async function* streamBriefRefinement(
   input: string,
   signal?: AbortSignal,
   answers?: string[],
 ): AsyncGenerator<BriefStreamEvent> {
-  const res = await fetch('/api/briefs/refine', {
+  const res = await fetch(`${apiBase}/api/briefs/refine`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ input, answers }),

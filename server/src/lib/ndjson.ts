@@ -16,6 +16,8 @@ export function writeNdjsonHeaders(raw: ServerResponse): void {
     'Transfer-Encoding': 'chunked',
     'Cache-Control': 'no-cache',
     'X-Accel-Buffering': 'no',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Credentials': 'true',
   });
   raw.flushHeaders();
 }

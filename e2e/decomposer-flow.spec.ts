@@ -72,19 +72,19 @@ async function seedSession(request: any, data: {
   verification?: string;
   regression?: string;
 }) {
-  const res = await request.post(`${API}/trpc/task._seedSession`, {
-    data: { '0': data },
+  const res = await request.post(`${API}/test/seed-session`, {
+    data,
   });
   expect(res.ok()).toBeTruthy();
-  return (await res.json())[0].result.data;
+  return (await res.json()).data;
 }
 
 async function updateSession(request: any, id: string, updates: Record<string, any>) {
-  const res = await request.post(`${API}/trpc/task._updateSession`, {
-    data: { '0': { id, ...updates } },
+  const res = await request.post(`${API}/test/update-session`, {
+    data: { id, ...updates },
   });
   expect(res.ok()).toBeTruthy();
-  return (await res.json())[0].result.data;
+  return (await res.json()).data;
 }
 
 async function seedVerdict(request: any, data: {
@@ -95,8 +95,8 @@ async function seedVerdict(request: any, data: {
   reason: string;
   patch_details?: string | null;
 }) {
-  const res = await request.post(`${API}/trpc/task._seedVerdict`, {
-    data: { '0': data },
+  const res = await request.post(`${API}/test/seed-verdict`, {
+    data,
   });
   expect(res.ok()).toBeTruthy();
 }

@@ -23,7 +23,7 @@ import {
   publishTaskStateChanged,
   publishAuditComplete,
 } from '../services/event-bus.js';
-import { dispatch as aoDispatch } from '../services/ao-dispatch.js';
+import { dispatch as aoDispatch, kill as aoKill, send as aoSend } from '../services/ao-dispatch.js';
 import { startPoller } from '../services/ao-status-poller.js';
 import { env } from '../env.js';
 import * as sessionQueries from '../db/queries/sessions.js';
@@ -282,8 +282,12 @@ const taskRouter = router({
         return taskQueries.getTask(input.id)!;
       }
 
-      // Non-large: return approved task (dispatch separately via task.dispatch)
-      return taskQueries.getTask(input.id)!;
+      // Non-large: auto-dispatch
+      const approvedTask = taskQueries.getTask(input.id)!;
+      autoDispatch(approvedTask).catch(() => {
+        // Error already handled inside autoDispatch
+      });
+      return approvedTask;
     }),
 
   sessions: publicProcedure
@@ -360,57 +364,52 @@ const taskRouter = router({
       return eventQueries.getEventsForTask(input.taskId, input.limit);
     }),
 
-  // Test-only: seed sessions and verdicts for E2E tests
-  _seedSession: publicProcedure
-    .input(z.object({
-      id: z.string(),
-      task_id: z.string(),
-      session_number: z.number(),
-      title: z.string(),
-      prompt: z.string().optional(),
-      state: z.enum(['pending', 'auditing', 'ready', 'dispatched', 'running', 'verifying', 'passed', 'failed', 'skipped']).optional(),
-      deliverables: z.string().optional(),
-      verification: z.string().optional(),
-      regression: z.string().optional(),
-      anti_patterns: z.string().optional(),
-    }))
-    .mutation(({ input }) => {
-      if (env.NODE_ENV === 'production') throw new Error('Not available in production');
-      sessionQueries.insertSession(input);
-      return sessionQueries.getSession(input.id)!;
-    }),
-
-  _seedVerdict: publicProcedure
-    .input(z.object({
-      id: z.string(),
-      task_id: z.string(),
-      file_path: z.string(),
-      verdict: z.enum(['keep', 'patch', 'rewrite', 'delete', 'create']),
-      reason: z.string(),
-      patch_details: z.string().nullable().optional(),
-    }))
-    .mutation(({ input }) => {
-      if (env.NODE_ENV === 'production') throw new Error('Not available in production');
-      auditQueries.insertVerdict(input);
+  sendFix: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ input }) => {
+      const task = taskQueries.getTask(input.id);
+      if (!task) throw new Error('Task not found');
+      if (task.state !== 'failed') {
+        throw new Error(`Cannot send fix for task in state: ${task.state}`);
+      }
+      if (!task.ao_session_id) {
+        throw new Error('Task has no AO session');
+      }
+      const message = `CI failed. Read the logs and fix: ${task.failure_reason ?? 'unknown error'}`;
+      await aoSend(task.ao_session_id, message);
       return { ok: true };
     }),
 
-  _updateSession: publicProcedure
-    .input(z.object({
-      id: z.string(),
-      state: z.enum(['pending', 'auditing', 'ready', 'dispatched', 'running', 'verifying', 'passed', 'failed', 'skipped']).optional(),
-      verification_output: z.string().nullable().optional(),
-      failure_reason: z.string().nullable().optional(),
-      cost_usd: z.number().optional(),
-      retry_count: z.number().optional(),
-      started_at: z.number().nullable().optional(),
-      completed_at: z.number().nullable().optional(),
-    }))
-    .mutation(({ input }) => {
-      if (env.NODE_ENV === 'production') throw new Error('Not available in production');
-      const { id, ...updates } = input;
-      sessionQueries.updateSession(id, updates);
-      return sessionQueries.getSession(id)!;
+  killSession: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ input }) => {
+      const task = taskQueries.getTask(input.id);
+      if (!task) throw new Error('Task not found');
+      if (!['running', 'dispatched', 'failed'].includes(task.state)) {
+        throw new Error(`Cannot kill session for task in state: ${task.state}`);
+      }
+      if (!task.ao_session_id) {
+        throw new Error('Task has no AO session to kill');
+      }
+      await aoKill(task.ao_session_id);
+      const updated = taskQueries.updateTask(input.id, {
+        state: 'failed',
+        failure_reason: 'Session killed by user',
+        completed_at: Math.floor(Date.now() / 1000),
+      })!;
+
+      eventQueries.createEvent({
+        id: eventId(),
+        task_id: input.id,
+        event_type: 'failed',
+        from_state: task.state,
+        to_state: 'failed',
+        payload: JSON.stringify({ reason: 'user_killed' }),
+        actor: 'human',
+      });
+
+      publishTaskStateChanged(input.id, task.state, 'failed');
+      return updated;
     }),
 });
 
@@ -472,6 +471,56 @@ const metricsRouter = router({
       return metricsQueries.getProjectMetrics(input.projectId);
     }),
 });
+
+/**
+ * Auto-dispatch an approved task to AO.
+ * Sets state to dispatched on success, failed on error.
+ * @param task - The approved task
+ */
+async function autoDispatch(task: TaskRow): Promise<void> {
+  try {
+    const result = await aoDispatch(task);
+
+    taskQueries.updateTask(task.id, {
+      state: 'dispatched',
+      ao_session_id: result.sessionId,
+      ao_branch: result.branch,
+      dispatched_at: Math.floor(Date.now() / 1000),
+    });
+
+    eventQueries.createEvent({
+      id: eventId(),
+      task_id: task.id,
+      event_type: 'dispatched',
+      from_state: 'approved',
+      to_state: 'dispatched',
+      payload: JSON.stringify({ sessionId: result.sessionId, branch: result.branch }),
+      actor: 'system',
+    });
+
+    publishTaskStateChanged(task.id, 'approved', 'dispatched');
+    startPoller();
+  } catch (err) {
+    const reason = (err as Error).message;
+    taskQueries.updateTask(task.id, {
+      state: 'failed',
+      failure_reason: reason,
+      completed_at: Math.floor(Date.now() / 1000),
+    });
+
+    eventQueries.createEvent({
+      id: eventId(),
+      task_id: task.id,
+      event_type: 'failed',
+      from_state: 'approved',
+      to_state: 'failed',
+      payload: JSON.stringify({ error: reason }),
+      actor: 'system',
+    });
+
+    publishTaskStateChanged(task.id, 'approved', 'failed');
+  }
+}
 
 /**
  * Handle the decomposer flow for large tasks.

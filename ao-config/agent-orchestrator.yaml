@@ -23,7 +23,7 @@ projects:
 notifiers:
   webhook:
     plugin: webhook
-    to: http://cortex:3481/api/ao-events
+    to: http://cortex-v3:3481/api/ao-events
 
 notificationRouting:
   urgent: [webhook]

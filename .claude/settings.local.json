@@ -21,7 +21,26 @@
       "Bash(git init && git add -A && git status -s | wc -l)",
       "Bash(pnpm --filter @cortex-v3/server build 2>&1 && npx tsc --build --force 2>&1)",
       "Bash(pnpm --filter @cortex-v3/server build 2>&1 && pnpm --filter @cortex-v3/server test 2>&1)",
-      "Bash(pnpm --filter @cortex-v3/web build 2>&1 | tail -12)"
+      "Bash(pnpm --filter @cortex-v3/web build 2>&1 | tail -12)",
+      "Bash(pnpm add -D -w @playwright/test 2>&1 | tail -10)",
+      "Bash(npx tsc --noEmit --project server/tsconfig.json 2>&1)",
+      "Bash(pnpm --filter server test 2>&1 | tail -15)",
+      "Bash(pnpm --filter server test 2>&1 | tail -10)",
+      "Bash(pnpm --filter server build 2>&1 | tail -10)",
+      "Bash(npx tsc --build --force 2>&1 && pnpm --filter web typecheck 2>&1 | tail -5)",
+      "Bash(pnpm --filter web build 2>&1 | tail -15)",
+      "Bash(cd /home/lumo/cortex-v3/server && npx tsc --noEmit 2>&1)",
+      "Bash(cd /home/lumo/cortex-v3/web && npx tsc --noEmit 2>&1)",
+      "Bash(npx tsup 2>&1)",
+      "Bash(npx tsc --noEmit 2>&1 | head -5)",
+      "Bash(npx tsc --noEmit 2>&1 | grep \"error TS\" | wc -l)",
+      "Bash(npx tsc --noEmit 2>&1 | grep \"error TS\" | sed 's/\\(.*//' | sort -u)",
+      "Bash(cd /home/lumo/cortex-v3/server && npx tsup 2>&1)",
+      "Bash(docker compose up cortex-v3 -d 2>&1)",
+      "Bash(git submodule add https://github.com/ComposioHQ/agent-orchestrator.git ao-service 2>&1)",
+      "Bash(pnpm:*)",
+      "Bash(docker compose:*)",
+      "Bash(curl:*)"
     ]
   }
 }

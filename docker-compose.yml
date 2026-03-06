@@ -15,6 +15,9 @@ services:
     volumes:
       - cortex-v3-data:/data
       - ./ao-config:/ao-config
+    depends_on:
+      agent-orchestrator:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3481/health"]
@@ -22,5 +25,27 @@ services:
       timeout: 5s
       retries: 3
 
+  agent-orchestrator:
+    build:
+      context: ./ao-service
+      dockerfile: Dockerfile
+    ports: ["3100:3000"]
+    environment:
+      CLAUDE_SETUP_TOKEN: ${CLAUDE_SETUP_TOKEN}
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+    volumes:
+      - ./ao-config/agent-orchestrator.yaml:/app/agent-orchestrator.yaml
+      - ao-data:/root/.agent-orchestrator
+      - ao-worktrees:/root/.worktrees
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3000/api/sessions"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
 volumes:
   cortex-v3-data:
+  ao-data:
+  ao-worktrees:

@@ -14,6 +14,7 @@ import { registerHealthRoute } from './routes/health.js';
 import { registerSSERoute } from './routes/sse.js';
 import { registerBriefRoutes } from './routes/briefs.js';
 import { registerAoWebhookRoute } from './routes/ao-webhook.js';
+import { registerTestRoutes } from './routes/test-routes.js';
 
 const fastify = Fastify({
   logger: {
@@ -41,6 +42,10 @@ await registerHealthRoute(fastify);
 await registerSSERoute(fastify);
 await registerBriefRoutes(fastify);
 await registerAoWebhookRoute(fastify);
+
+if (env.NODE_ENV !== 'production') {
+  await fastify.register(registerTestRoutes, { prefix: '/test' });
+}
 
 fastify.get('/', (_req, reply) => {
   return reply.redirect(env.WEB_URL);

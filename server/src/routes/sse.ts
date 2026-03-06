@@ -19,6 +19,8 @@ export async function registerSSERoute(fastify: FastifyInstance): Promise<void> 
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
       'X-Accel-Buffering': 'no',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Credentials': 'true',
     });
     raw.flushHeaders();
 
