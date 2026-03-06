@@ -7,6 +7,7 @@ import { create } from 'zustand';
 
 export type FilterValue = 'all' | 'active' | 'done' | 'failed' | 'sleeping';
 export type SortValue = 'priority' | 'recent' | 'state';
+export type MobileTab = 'brief' | 'board';
 
 interface UIStore {
   selectedTaskId: string | null;
@@ -23,6 +24,9 @@ interface UIStore {
 
   sort: SortValue;
   setSort: (s: SortValue) => void;
+
+  mobileTab: MobileTab;
+  setMobileTab: (tab: MobileTab) => void;
 }
 
 export const useUIStore = create<UIStore>((set) => ({
@@ -40,4 +44,7 @@ export const useUIStore = create<UIStore>((set) => ({
 
   sort: 'priority',
   setSort: (sort) => set({ sort }),
+
+  mobileTab: 'brief',
+  setMobileTab: (mobileTab) => set({ mobileTab }),
 }));

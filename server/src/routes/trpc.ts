@@ -427,6 +427,27 @@ const taskRouter = router({
       taskQueries.deleteTask(input.id);
       return { ok: true };
     }),
+
+  bulkDelete: publicProcedure
+    .input(z.object({
+      state: z.enum(['done', 'failed']),
+    }))
+    .mutation(({ input }) => {
+      const tasks = taskQueries.listTasks({ state: input.state as TaskState });
+      const projectCounts = new Map<string, number>();
+      for (const t of tasks) {
+        if (t.project_id) {
+          projectCounts.set(t.project_id, (projectCounts.get(t.project_id) ?? 0) + 1);
+        }
+      }
+      const count = taskQueries.bulkDeleteByState(input.state as TaskState);
+      for (const [pid, c] of projectCounts) {
+        for (let i = 0; i < c; i++) {
+          projectQueries.decrementTaskCount(pid);
+        }
+      }
+      return { deleted: count };
+    }),
 });
 
 const projectRouter = router({

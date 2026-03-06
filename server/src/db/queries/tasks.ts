@@ -173,6 +173,37 @@ export function updateTask(
  */
 export function deleteTask(id: string): void {
   const db = getDb();
+  db.prepare('DELETE FROM audit_verdicts WHERE task_id = ?').run(id);
+  db.prepare('DELETE FROM task_sessions WHERE task_id = ?').run(id);
+  db.prepare('DELETE FROM comments WHERE task_id = ?').run(id);
   db.prepare('DELETE FROM events WHERE task_id = ?').run(id);
   db.prepare('DELETE FROM tasks WHERE id = ?').run(id);
+}
+
+/**
+ * Bulk-delete tasks by state. Handles all FK-referencing tables.
+ * @param state - Task state to delete
+ * @returns Number of tasks deleted
+ */
+export function bulkDeleteByState(state: TaskState): number {
+  const db = getDb();
+  const taskIds = db.prepare('SELECT id FROM tasks WHERE state = ?')
+    .all(state) as { id: string }[];
+
+  if (taskIds.length === 0) return 0;
+
+  const deleteFn = db.transaction(() => {
+    for (const { id } of taskIds) {
+      db.prepare('DELETE FROM audit_verdicts WHERE task_id = ?').run(id);
+      db.prepare('DELETE FROM task_sessions WHERE task_id = ?').run(id);
+      db.prepare('DELETE FROM comments WHERE task_id = ?').run(id);
+      db.prepare('DELETE FROM events WHERE task_id = ?').run(id);
+    }
+    const placeholders = taskIds.map(() => '?').join(',');
+    const ids = taskIds.map((t) => t.id);
+    db.prepare(`DELETE FROM tasks WHERE id IN (${placeholders})`).run(...ids);
+  });
+  deleteFn();
+
+  return taskIds.length;
 }

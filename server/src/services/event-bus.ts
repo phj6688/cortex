@@ -129,12 +129,12 @@ export function publishVerificationResult(taskId: string, sessionId: string, pas
   emit('verification_result', { taskId, sessionId, passed });
 }
 
-/** Start 30s heartbeat timer */
+/** Start 15s heartbeat timer */
 export function startHeartbeat(): void {
   if (heartbeatTimer) return;
   heartbeatTimer = setInterval(() => {
     emit('heartbeat', { ts: Math.floor(Date.now() / 1000) });
-  }, 30_000);
+  }, 15_000);
 }
 
 /** Stop heartbeat timer */

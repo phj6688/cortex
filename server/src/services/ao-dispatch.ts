@@ -76,9 +76,11 @@ export async function dispatch(task: TaskRow): Promise<DispatchResult> {
   if (!task.brief) throw new Error('Cannot dispatch task without a brief');
   if (!task.project_id) throw new Error('Cannot dispatch task without a project');
 
+  // Cortex stores "prj_cortex_v3", AO config uses "cortex-v3"
+  const aoProjectId = task.project_id.replace(/^prj_/, '').replace(/_/g, '-');
   const aoBaseUrl = env.AO_BASE_URL;
 
-  log.info({ taskId: task.id, projectId: task.project_id, aoBaseUrl }, 'dispatch: starting');
+  log.info({ taskId: task.id, projectId: task.project_id, aoProjectId, aoBaseUrl }, 'dispatch: starting');
 
   // v1 — HTTP (preferred)
   if (aoBaseUrl) {
@@ -88,8 +90,9 @@ export async function dispatch(task: TaskRow): Promise<DispatchResult> {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          projectId: task.project_id,
+          projectId: aoProjectId,
           issueId: task.id,
+          prompt: formatBriefForAgent(task.brief!),
         }),
         signal: AbortSignal.timeout(30_000),
       });
@@ -141,9 +144,11 @@ async function dispatchCLI(task: TaskRow): Promise<DispatchResult> {
   const briefPath = writeBriefTempFile(task.id, task.brief!);
 
   try {
+    // Strip prj_ prefix and convert underscores to hyphens for AO
+    const aoProject = task.project_id!.replace(/^prj_/, '').replace(/_/g, '-');
     const { stdout } = await execFileAsync('ao', [
       'spawn',
-      task.project_id!,
+      aoProject,
       '--session-id',
       task.id,
       '--rules',

@@ -3,7 +3,7 @@ worktreeDir: ~/.worktrees
 port: 3000
 
 defaults:
-  runtime: process
+  runtime: tmux
   agent: claude-code
   workspace: worktree
   notifiers: [webhook]
@@ -11,14 +11,24 @@ defaults:
 projects:
   ops-homelab:
     name: Homelab Ops
-    path: ~/homelab
+    path: /root/repos/homelab-ops
     repo: phj6688/homelab-ops
     defaultBranch: main
     agentRules: |
       This is an operations/infrastructure task, not feature development.
       Do not open a PR unless explicitly asked.
       Report findings as a structured summary.
-      SSH access available to 100.115.215.121.
+
+  cortex-v3:
+    name: Cortex V3
+    path: /root/repos/cortex-v3
+    repo: phj6688/cortex
+    defaultBranch: master
+    agentRules: |
+      This is the Cortex V3 AI task delegation app.
+      Read CLAUDE.md for coding standards.
+      TypeScript strict. No any. No ts-ignore.
+      Run pnpm typecheck before committing.
 
 notifiers:
   webhook:

@@ -6,7 +6,7 @@
  * @module components/canvas/brief-panel
  */
 
-import { useState, useCallback, useRef, type MutableRefObject } from 'react';
+import { useState, useCallback, useRef, useEffect, type MutableRefObject } from 'react';
 import * as notify from '../../lib/notify';
 import { ChatInput } from '../brief/chat-input';
 import { RefinementStream } from '../brief/refinement-stream';
@@ -20,7 +20,7 @@ import { BriefPanelSkeleton } from '../layout/skeleton';
 import { streamBriefRefinement, type BriefContent, type BriefCompletePayload } from '../../lib/api';
 import { trpc } from '../../lib/trpc';
 
-type Phase = 'input' | 'streaming' | 'questions' | 'brief' | 'editing' | 'signed-off';
+type Phase = 'input' | 'streaming' | 'questions' | 'brief' | 'editing' | 'dispatching' | 'signed-off';
 
 interface BriefPanelProps {
   chatInputRef?: MutableRefObject<HTMLTextAreaElement | null>;
@@ -38,12 +38,14 @@ export function BriefPanel({ chatInputRef }: BriefPanelProps) {
   const [originalInput, setOriginalInput] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [noProjectWarning, setNoProjectWarning] = useState(false);
+  const [dispatchedTaskId, setDispatchedTaskId] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const localInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const createTask = trpc.task.create.useMutation();
   const updateState = trpc.task.updateState.useMutation();
   const approveTask = trpc.task.approve.useMutation();
+  const utils = trpc.useUtils();
 
   // Merge external ref
   const setInputRef = useCallback((el: HTMLTextAreaElement | null) => {
@@ -156,8 +158,8 @@ export function BriefPanel({ chatInputRef }: BriefPanelProps) {
 
       await approveTask.mutateAsync({ id: task.id });
 
-      notify.success('Signed off — task approved');
-      setPhase('signed-off');
+      setDispatchedTaskId(task.id);
+      setPhase('dispatching');
     } catch (err) {
       // Failure case #3: SSE disconnect during sign-off
       notify.error('Sign-off failed — try again');
@@ -169,8 +171,43 @@ export function BriefPanel({ chatInputRef }: BriefPanelProps) {
     setPhase('input'); setInput(''); setOriginalInput(''); setTokens('');
     setWarning(null); setQuestions([]); setAnswers([]); setBrief(null);
     setProjectId(null); setError(null); setNoProjectWarning(false);
+    setDispatchedTaskId(null);
     abortRef.current?.abort(); abortRef.current = null;
   };
+
+  useEffect(() => {
+    if (phase !== 'dispatching' || !dispatchedTaskId) return;
+
+    let cancelled = false;
+    const interval = setInterval(async () => {
+      if (cancelled) return;
+      try {
+        const task = await utils.task.get.fetch({ id: dispatchedTaskId });
+        if (task.state === 'dispatched' || task.state === 'running') {
+          notify.success('Task dispatched to agent');
+          setPhase('signed-off');
+        } else if (task.state === 'failed') {
+          notify.error(`Dispatch failed: ${task.failure_reason ?? 'unknown error'}`);
+          setPhase('signed-off');
+        }
+      } catch {
+        // Fetch error — keep polling
+      }
+    }, 1500);
+
+    const timeout = setTimeout(() => {
+      if (!cancelled) {
+        notify.warn('Dispatch timed out — check task board');
+        setPhase('signed-off');
+      }
+    }, 35_000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+  }, [phase, dispatchedTaskId, utils]);
 
   return (
     <div className="flex h-full flex-col p-6">
@@ -270,6 +307,23 @@ export function BriefPanel({ chatInputRef }: BriefPanelProps) {
           onSave={handleEditorSave}
           onCancel={() => setPhase(brief ? 'brief' : 'input')}
         />
+      )}
+
+      {phase === 'dispatching' && (
+        <div className="mt-4 text-center">
+          <div
+            className="rounded-lg p-4"
+            style={{ background: 'var(--accent-glow)' }}
+          >
+            <span
+              className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-t-transparent"
+              style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }}
+            />
+            <p className="mt-2 text-sm font-semibold" style={{ color: 'var(--accent-dim)' }}>
+              Dispatching to agent...
+            </p>
+          </div>
+        </div>
       )}
 
       {phase === 'signed-off' && (

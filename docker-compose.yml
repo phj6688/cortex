@@ -37,6 +37,8 @@ services:
       - ./ao-config/agent-orchestrator.yaml:/app/agent-orchestrator.yaml
       - ao-data:/root/.agent-orchestrator
       - ao-worktrees:/root/.worktrees
+      - /home/lumo/cortex-v3:/root/repos/cortex-v3
+      - /home/lumo/.ssh:/root/.ssh:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:3000/api/sessions"]

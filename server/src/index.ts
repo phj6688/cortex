@@ -22,6 +22,9 @@ const fastify = Fastify({
   },
 });
 
+fastify.server.keepAliveTimeout = 120_000;
+fastify.server.headersTimeout = 130_000;
+
 /** Run migrations before starting */
 migrate(fastify.log);
 

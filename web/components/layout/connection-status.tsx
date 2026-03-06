@@ -30,17 +30,19 @@ export function ConnectionStatus() {
   const config = STATUS_CONFIG[status];
 
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-1.5" title={config.label}>
       <span
         className={`inline-block h-2 w-2 rounded-full${config.pulse ? ' animate-pulse' : ''}`}
         style={{ background: config.color }}
       />
-      <span
-        className="text-xs"
-        style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}
-      >
-        {config.label}
-      </span>
+      {status !== 'connected' && (
+        <span
+          className="text-xs"
+          style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}
+        >
+          {config.label}
+        </span>
+      )}
     </div>
   );
 }

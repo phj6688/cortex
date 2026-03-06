@@ -24,10 +24,10 @@ export async function registerSSERoute(fastify: FastifyInstance): Promise<void> 
     });
     raw.flushHeaders();
 
-    // Per-connection heartbeat every 30s
+    // Per-connection heartbeat every 15s
     const heartbeat = setInterval(() => {
       raw.write(`event: heartbeat\ndata: ${Date.now()}\n\n`);
-    }, 30_000);
+    }, 15_000);
 
     const unsubscribe = subscribe((event) => {
       try {

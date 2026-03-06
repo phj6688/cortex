@@ -7,6 +7,8 @@
 
 import { ConnectionStatus } from './connection-status';
 
+const aoDashboardUrl = process.env.NEXT_PUBLIC_AO_DASHBOARD_URL || '';
+
 export function TopBar() {
   return (
     <div
@@ -23,6 +25,18 @@ export function TopBar() {
         <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
           v3
         </span>
+        {aoDashboardUrl && (
+          <a
+            href={aoDashboardUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded px-2 py-0.5 text-[10px] font-medium transition-colors hover:bg-white/5"
+            style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}
+            title="Open AO Dashboard"
+          >
+            AO Dashboard &#8599;
+          </a>
+        )}
       </div>
 
       <div className="flex items-center gap-4">

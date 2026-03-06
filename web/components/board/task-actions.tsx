@@ -6,6 +6,7 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import * as notify from '../../lib/notify';
 import { trpc } from '../../lib/trpc';
 import type { Task } from '../../stores/task-store';
@@ -37,7 +38,9 @@ function isCIFailure(reason: string | null): boolean {
 export function TaskActions({ task, onDeleted }: TaskActionsProps) {
   const [open, setOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const utils = trpc.useUtils();
 
   const updateState = trpc.task.updateState.useMutation({
@@ -64,7 +67,8 @@ export function TaskActions({ task, onDeleted }: TaskActionsProps) {
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node) &&
+          !buttonRef.current?.contains(e.target as Node)) {
         setOpen(false);
         setConfirmDelete(false);
       }
@@ -149,10 +153,19 @@ export function TaskActions({ task, onDeleted }: TaskActionsProps) {
   const visible = items.filter((i) => i.condition);
 
   return (
-    <div className="relative" ref={menuRef}>
+    <div className="relative">
       <button
+        ref={buttonRef}
         type="button"
-        onClick={(e) => { e.stopPropagation(); setOpen(!open); setConfirmDelete(false); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (!open && buttonRef.current) {
+            const rect = buttonRef.current.getBoundingClientRect();
+            setMenuPos({ top: rect.bottom + 4, left: rect.right });
+          }
+          setOpen(!open);
+          setConfirmDelete(false);
+        }}
         className="rounded px-1.5 py-0.5 text-xs transition-colors hover:bg-white/10"
         style={{ color: 'var(--text-secondary)' }}
         title="Task actions"
@@ -160,10 +173,14 @@ export function TaskActions({ task, onDeleted }: TaskActionsProps) {
         {'\u22EF'}
       </button>
 
-      {open && (
+      {open && menuPos && createPortal(
         <div
-          className="absolute right-0 top-full z-10 mt-1 min-w-[160px] rounded-lg border py-1"
+          ref={menuRef}
+          className="fixed z-50 min-w-[160px] rounded-lg border py-1"
           style={{
+            top: menuPos.top,
+            left: menuPos.left,
+            transform: 'translateX(-100%)',
             background: 'var(--bg-elevated)',
             borderColor: 'var(--border)',
             boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
@@ -184,7 +201,8 @@ export function TaskActions({ task, onDeleted }: TaskActionsProps) {
               </button>
             </div>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

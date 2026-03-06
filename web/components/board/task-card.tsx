@@ -14,6 +14,8 @@ import { formatElapsed } from '../../lib/format';
 import { useUIStore } from '../../stores/ui-store';
 import { useProjects } from '../../hooks/use-projects';
 import { useTaskSessions } from '../../hooks/use-tasks';
+import { trpc } from '../../lib/trpc';
+import * as notify from '../../lib/notify';
 import type { Task } from '../../stores/task-store';
 
 const PRIORITY_COLORS = ['transparent', 'var(--warning)', 'var(--danger)'] as const;
@@ -60,7 +62,9 @@ export function TaskCard({ task }: TaskCardProps) {
       className="group cursor-pointer overflow-hidden rounded-lg border transition-colors"
       style={{
         background: 'var(--bg-surface)',
-        borderColor: isSelected ? 'var(--accent)' : 'var(--border)',
+        borderTopColor: isSelected ? 'var(--accent)' : 'var(--border)',
+        borderRightColor: isSelected ? 'var(--accent)' : 'var(--border)',
+        borderBottomColor: isSelected ? 'var(--accent)' : 'var(--border)',
         boxShadow: isSelected ? 'var(--shadow-glow)' : 'var(--shadow-card)',
         borderLeftWidth: '3px',
         borderLeftColor: PRIORITY_COLORS[task.priority] ?? 'transparent',
@@ -107,6 +111,7 @@ export function TaskCard({ task }: TaskCardProps) {
         )}
 
         <SessionIndicator task={task} />
+        <InlineActions task={task} />
 
         {/* Footer: elapsed + cost */}
         <div className="mt-2 flex items-center justify-between">
@@ -136,6 +141,68 @@ function SessionIndicator({ task }: { task: Task }) {
   if (!isLarge || !decomposedStates.includes(task.state)) return null;
 
   return <SessionCountBadge taskId={task.id} />;
+}
+
+function InlineActions({ task }: { task: Task }) {
+  const utils = trpc.useUtils();
+  const updateState = trpc.task.updateState.useMutation({
+    onSuccess: () => utils.task.list.invalidate(),
+  });
+  const approve = trpc.task.approve.useMutation({
+    onSuccess: () => { utils.task.list.invalidate(); notify.success('Task approved'); },
+    onError: (err) => notify.error(`Approve failed: ${err.message}`),
+  });
+  const deleteTask = trpc.task.delete.useMutation({
+    onSuccess: () => { utils.task.list.invalidate(); notify.success('Task deleted'); },
+    onError: (err) => notify.error(`Delete failed: ${err.message}`),
+  });
+
+  const buttons: { label: string; onClick: () => void; variant: 'accent' | 'danger' | 'muted' }[] = [];
+
+  switch (task.state) {
+    case 'failed':
+      buttons.push({ label: 'Retry', onClick: () => updateState.mutate({ id: task.id, state: 'draft' }), variant: 'accent' });
+      buttons.push({ label: 'Delete', onClick: () => deleteTask.mutate({ id: task.id }), variant: 'danger' });
+      break;
+    case 'pending_approval':
+      buttons.push({ label: 'Approve', onClick: () => approve.mutate({ id: task.id }), variant: 'accent' });
+      break;
+    case 'done':
+      buttons.push({ label: 'Delete', onClick: () => deleteTask.mutate({ id: task.id }), variant: 'danger' });
+      break;
+    case 'sleeping':
+      buttons.push({ label: 'Wake', onClick: () => updateState.mutate({ id: task.id, state: 'draft' }), variant: 'accent' });
+      buttons.push({ label: 'Delete', onClick: () => deleteTask.mutate({ id: task.id }), variant: 'danger' });
+      break;
+    default:
+      return null;
+  }
+
+  const colorMap = {
+    accent: 'var(--accent)',
+    danger: 'var(--danger)',
+    muted: 'var(--text-secondary)',
+  };
+
+  return (
+    <div className="mt-2 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+      {buttons.map((b) => (
+        <button
+          key={b.label}
+          type="button"
+          onClick={b.onClick}
+          className="rounded px-2 py-0.5 text-[10px] font-medium transition-colors"
+          style={{
+            color: colorMap[b.variant],
+            border: '1px solid',
+            borderColor: colorMap[b.variant],
+          }}
+        >
+          {b.label}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function SessionCountBadge({ taskId }: { taskId: string }) {

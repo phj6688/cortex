@@ -72,18 +72,34 @@ export function useTaskEvents() {
   useEffect(() => {
     let es: EventSource;
     let destroyed = false;
+    let watchdog: ReturnType<typeof setTimeout>;
 
     function connect() {
       if (destroyed) return;
+
+      function resetWatchdog() {
+        clearTimeout(watchdog);
+        watchdog = setTimeout(() => {
+          es.close();
+          setStatus('reconnecting');
+          if (!destroyed) {
+            setTimeout(connect, reconnectDelay.current);
+            reconnectDelay.current = Math.min(reconnectDelay.current * 2, 5000);
+          }
+        }, 20_000);
+      }
+
       es = new EventSource(`${apiBase}/api/events`);
 
       es.onopen = () => {
         reconnectDelay.current = 100;
         setStatus('connected');
+        resetWatchdog();
       };
 
       es.onerror = () => {
         es.close();
+        clearTimeout(watchdog);
         setStatus('reconnecting');
         if (!destroyed) {
           setTimeout(connect, reconnectDelay.current);
@@ -91,7 +107,12 @@ export function useTaskEvents() {
         }
       };
 
+      es.addEventListener('heartbeat', () => {
+        resetWatchdog();
+      });
+
       es.addEventListener('task_state_changed', (e) => {
+        resetWatchdog();
         const parsed = parseEvent(e.data);
         if (!parsed) return;
         const { taskId } = parsed.data as { taskId: string };
@@ -100,10 +121,12 @@ export function useTaskEvents() {
       });
 
       es.addEventListener('task_created', () => {
+        resetWatchdog();
         utils.task.list.invalidate();
       });
 
       es.addEventListener('cost_update', (e) => {
+        resetWatchdog();
         const parsed = parseEvent(e.data);
         if (!parsed) return;
         const { taskId } = parsed.data as { taskId: string };
@@ -112,6 +135,7 @@ export function useTaskEvents() {
       });
 
       es.addEventListener('comment_added', (e) => {
+        resetWatchdog();
         const parsed = parseEvent(e.data);
         if (!parsed) return;
         const { taskId } = parsed.data as { taskId: string };
@@ -119,6 +143,7 @@ export function useTaskEvents() {
       });
 
       es.addEventListener('session_state_changed', (e) => {
+        resetWatchdog();
         const parsed = parseEvent(e.data);
         if (!parsed) return;
         const { taskId } = parsed.data as { taskId: string };
@@ -127,6 +152,7 @@ export function useTaskEvents() {
       });
 
       es.addEventListener('audit_complete', (e) => {
+        resetWatchdog();
         const parsed = parseEvent(e.data);
         if (!parsed) return;
         const { taskId } = parsed.data as { taskId: string };
@@ -135,6 +161,7 @@ export function useTaskEvents() {
       });
 
       es.addEventListener('verification_result', (e) => {
+        resetWatchdog();
         const parsed = parseEvent(e.data);
         if (!parsed) return;
         const { taskId } = parsed.data as { taskId: string };
@@ -145,6 +172,7 @@ export function useTaskEvents() {
     connect();
     return () => {
       destroyed = true;
+      clearTimeout(watchdog);
       es?.close();
       setStatus('disconnected');
     };

@@ -1,29 +1,32 @@
-# Cortex V3 — Agent Rules
+# Cortex V3
+
+AI task delegation control plane. Fastify 5 + tRPC v11 + SQLite backend, Next.js 16 + Tailwind 4 frontend.
+
+## Commands
+- Dev: `pnpm dev` (server 3481, web 9301)
+- Build: `pnpm --filter server build && pnpm --filter web build`
+- Test: `pnpm test` (vitest, 121+ tests)
+- Typecheck: `pnpm typecheck`
+- Docker: `docker compose up -d --build`
+
+## Code Style
+- TypeScript strict. No `any`. No `ts-ignore`.
+- Files under 300 lines. Split aggressively.
+- Prepared statements for ALL SQL. Never string concatenation.
+- nanoid prefixes: tsk_, prj_, evt_, cmt_, ses_, aud_
+- All dates as unix timestamps (seconds).
+- IMPORTANT: Run `pnpm typecheck` after every change.
 
 ## Architecture
-- **Backend**: Fastify 5, tRPC v11, better-sqlite3, pino
-- **Frontend**: Next.js 16, Tailwind CSS v4, Zustand, TanStack Query v5
-- **Build**: tsup (server), next build (web), biome (lint)
-- **Test**: vitest (server), playwright (e2e)
+- server/src/ — Fastify 5 + better-sqlite3 + tRPC v11
+- web/ — Next.js 16 App Router + Zustand + TanStack Query
+- SSE via reply.hijack() (non-async handler). Zero polling.
+- State transitions MUST go through task-machine.ts.
+- Every DB mutation writes to events table (audit log).
 
-## Ground Rules
-1. TypeScript strict mode. No `any`. No `ts-ignore`. No `as unknown as X`.
-2. Every file < 300 lines. One concern per file.
-3. All env vars validated at startup with zod (server/src/env.ts).
-4. All API responses follow `{ success: boolean, data?: T, error?: string }`.
-5. Zero polling. All real-time = SSE push only.
-6. NEVER `exec()` for shell commands. Always `execFile()` with args array.
-7. Every public function has JSDoc with @param and @returns.
-8. Prefixed IDs: tsk_, prj_, evt_, cmt_ (server/src/lib/id.ts).
-9. State transitions enforced by task-machine.ts — never bypass.
-10. All DB queries use prepared statements — never build SQL dynamically.
-
-## Port Map
-- Server: 3481
-- Web dev: 9301
-- Old Cortex: 3480 (never touch)
-
-## Protected
-- /home/lumo/cortex (old Cortex)
-- postgres, neo4j, redis containers
-- /home/lumo/.env
+## Gotchas
+- YOU MUST NOT use exec(). Always execFile() with args array.
+- SSE/NDJSON routes use reply.hijack() which bypasses CORS plugin — add CORS headers manually.
+- Framer Motion: EXACTLY 4 uses (task-card, task-detail, state-badge, ao-dashboard). CSS transitions elsewhere.
+- Docker: rebuild with `docker compose up -d --build` after server/src changes.
+- AO project IDs: strip `prj_` prefix and replace `_` with `-` before sending to AO.

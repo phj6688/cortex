@@ -1,46 +1,46 @@
 {
   "permissions": {
     "allow": [
-      "Bash(pnpm install 2>&1)",
-      "Bash(pnpm approve-builds better-sqlite3@11.10.0 @biomejs/biome@1.9.4 esbuild@0.21.5 esbuild@0.27.3 sharp@0.34.5 2>&1 && pnpm install 2>&1)",
-      "Bash(pnpm typecheck 2>&1)",
-      "Bash(pnpm build 2>&1 && pnpm test 2>&1)",
-      "Bash(pnpm build 2>&1)",
-      "Bash(pnpm test 2>&1)",
-      "Bash(cd /home/lumo/cortex-v3 && pnpm --filter @cortex-v3/web typecheck 2>&1)",
-      "Bash(npx tsc --build 2>&1)",
-      "Bash(pnpm --filter @cortex-v3/server test 2>&1)",
-      "Bash(curl -s http://localhost:3481/health 2>&1 || echo \"Server not running \\(expected if not started\\)\")",
-      "Bash(pnpm --filter @cortex-v3/web build 2>&1 | tail -20)",
-      "Bash(pnpm --filter @cortex-v3/server build 2>&1 && pnpm --filter @cortex-v3/server typecheck 2>&1)",
-      "Bash(npx tsc --build --force 2>&1 && pnpm --filter @cortex-v3/web typecheck 2>&1)",
-      "Bash(pnpm --filter @cortex-v3/web build 2>&1 | tail -15)",
-      "Bash(fuser -k 3481/tcp 2>/dev/null; true)",
-      "Bash(npx tsc --build --force 2>&1)",
-      "Bash(pnpm --filter @cortex-v3/web typecheck 2>&1)",
-      "Bash(git init && git add -A && git status -s | wc -l)",
-      "Bash(pnpm --filter @cortex-v3/server build 2>&1 && npx tsc --build --force 2>&1)",
-      "Bash(pnpm --filter @cortex-v3/server build 2>&1 && pnpm --filter @cortex-v3/server test 2>&1)",
-      "Bash(pnpm --filter @cortex-v3/web build 2>&1 | tail -12)",
-      "Bash(pnpm add -D -w @playwright/test 2>&1 | tail -10)",
-      "Bash(npx tsc --noEmit --project server/tsconfig.json 2>&1)",
-      "Bash(pnpm --filter server test 2>&1 | tail -15)",
-      "Bash(pnpm --filter server test 2>&1 | tail -10)",
-      "Bash(pnpm --filter server build 2>&1 | tail -10)",
-      "Bash(npx tsc --build --force 2>&1 && pnpm --filter web typecheck 2>&1 | tail -5)",
-      "Bash(pnpm --filter web build 2>&1 | tail -15)",
-      "Bash(cd /home/lumo/cortex-v3/server && npx tsc --noEmit 2>&1)",
-      "Bash(cd /home/lumo/cortex-v3/web && npx tsc --noEmit 2>&1)",
-      "Bash(npx tsup 2>&1)",
-      "Bash(npx tsc --noEmit 2>&1 | head -5)",
-      "Bash(npx tsc --noEmit 2>&1 | grep \"error TS\" | wc -l)",
-      "Bash(npx tsc --noEmit 2>&1 | grep \"error TS\" | sed 's/\\(.*//' | sort -u)",
-      "Bash(cd /home/lumo/cortex-v3/server && npx tsup 2>&1)",
-      "Bash(docker compose up cortex-v3 -d 2>&1)",
-      "Bash(git submodule add https://github.com/ComposioHQ/agent-orchestrator.git ao-service 2>&1)",
-      "Bash(pnpm:*)",
-      "Bash(docker compose:*)",
-      "Bash(curl:*)"
+      "Bash(pnpm *)",
+      "Bash(npm *)",
+      "Bash(npx *)",
+      "Bash(node *)",
+      "Bash(docker *)",
+      "Bash(curl *)",
+      "Bash(git *)",
+      "Bash(grep *)",
+      "Bash(cat *)",
+      "Bash(ls *)",
+      "Bash(find *)",
+      "Bash(sed *)",
+      "Bash(mkdir *)",
+      "Bash(cp *)",
+      "Bash(mv *)",
+      "Bash(rm *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Bash(sort *)",
+      "Bash(echo *)",
+      "Bash(kill *)",
+      "Bash(lsof *)",
+      "Bash(sqlite3 *)",
+      "Edit(*)",
+      "Write(*)",
+      "Read(*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pnpm typecheck 2>&1 | tail -3"
+          }
+        ]
+      }
     ]
   }
 }

@@ -135,22 +135,24 @@ export function migrate(logger: MinimalLogger): void {
     "SELECT name FROM sqlite_master WHERE type='table' AND name='tasks'"
   ).get() as { name: string } | undefined;
 
-  if (existing) {
-    logger.info('Database tables already exist — skipping migration');
-    return;
-  }
+  if (!existing) {
+    logger.info('Running database migration...');
+    db.exec(SCHEMA);
+    logger.info('Database migration complete — tables: projects, tasks, events, comments');
 
-  logger.info('Running database migration...');
-  db.exec(SCHEMA);
-  logger.info('Database migration complete — tables: projects, tasks, events, comments');
-
-  // Seed ops-homelab project on first boot
-  const seeded = db.prepare('SELECT id FROM projects WHERE id = ?').get('prj_ops_homelab');
-  if (!seeded) {
+    // Seed ops-homelab on first boot
     db.prepare(`
-      INSERT INTO projects (id, name, repo, path, default_branch)
+      INSERT OR IGNORE INTO projects (id, name, repo, path, default_branch)
       VALUES (?, ?, ?, ?, ?)
-    `).run('prj_ops_homelab', 'Homelab Ops', 'phj6688/homelab-ops', '~/homelab', 'main');
+    `).run('prj_ops_homelab', 'Homelab Ops', 'phj6688/homelab-ops', '/root/repos/homelab-ops', 'main');
     logger.info('Seeded default project: ops-homelab');
+  } else {
+    logger.info('Database tables already exist — skipping migration');
   }
+
+  // Always ensure cortex-v3 project exists
+  db.prepare(`
+    INSERT OR IGNORE INTO projects (id, name, repo, path, default_branch)
+    VALUES (?, ?, ?, ?, ?)
+  `).run('prj_cortex_v3', 'Cortex V3', 'phj6688/cortex', '/root/repos/cortex-v3', 'master');
 }
