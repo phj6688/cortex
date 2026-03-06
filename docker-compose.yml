@@ -31,7 +31,6 @@ services:
       dockerfile: Dockerfile
     ports: ["3100:3000"]
     environment:
-      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN}
       GITHUB_TOKEN: ${GITHUB_TOKEN}
     volumes:
       - ./ao-config/agent-orchestrator.yaml:/app/agent-orchestrator.yaml
@@ -39,6 +38,7 @@ services:
       - ao-worktrees:/root/.worktrees
       - /home/lumo/cortex-v3:/root/repos/cortex-v3
       - /home/lumo/.ssh:/root/.ssh:ro
+      - /home/peyman/.claude:/tmp/claude-auth:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:3000/api/sessions"]
