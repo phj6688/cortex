@@ -91,7 +91,6 @@ export async function dispatch(task: TaskRow): Promise<DispatchResult> {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           projectId: aoProjectId,
-          issueId: task.id,
           prompt: formatBriefForAgent(task.brief!),
         }),
         signal: AbortSignal.timeout(30_000),
