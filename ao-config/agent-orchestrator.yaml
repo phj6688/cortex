@@ -15,7 +15,7 @@ projects:
     repo: phj6688/homelab-ops
     defaultBranch: main
     agentConfig:
-      permissions: skip
+      permissions: default
     agentRules: |
       This is an operations/infrastructure task, not feature development.
       Do not open a PR unless explicitly asked.
@@ -27,7 +27,7 @@ projects:
     repo: phj6688/cortex
     defaultBranch: master
     agentConfig:
-      permissions: skip
+      permissions: default
     agentRules: |
       Read CLAUDE.md in the project root first.
       TypeScript strict mode. No any. No ts-ignore.
@@ -43,7 +43,7 @@ projects:
 notifiers:
   webhook:
     plugin: webhook
-    to: http://cortex-v3:3481/api/ao-events
+    url: http://cortex-v3:3481/api/ao-events
 
 notificationRouting:
   urgent: [webhook]
