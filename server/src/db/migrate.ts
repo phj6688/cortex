@@ -144,7 +144,7 @@ export function migrate(logger: MinimalLogger): void {
     db.prepare(`
       INSERT OR IGNORE INTO projects (id, name, repo, path, default_branch)
       VALUES (?, ?, ?, ?, ?)
-    `).run('prj_ops_homelab', 'Homelab Ops', 'phj6688/homelab-ops', '/root/repos/homelab-ops', 'main');
+    `).run('prj_ops_homelab', 'Homelab Ops', 'phj6688/homelab-ops', '/repos/homelab-ops', 'main');
     logger.info('Seeded default project: ops-homelab');
   } else {
     logger.info('Database tables already exist — skipping migration');
@@ -154,5 +154,5 @@ export function migrate(logger: MinimalLogger): void {
   db.prepare(`
     INSERT OR IGNORE INTO projects (id, name, repo, path, default_branch)
     VALUES (?, ?, ?, ?, ?)
-  `).run('prj_cortex_v3', 'Cortex V3', 'phj6688/cortex', '/root/repos/cortex-v3', 'master');
+  `).run('prj_cortex_v3', 'Cortex V3', 'phj6688/cortex', '/repos/cortex-v3', 'master');
 }

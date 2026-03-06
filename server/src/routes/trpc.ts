@@ -13,6 +13,7 @@ import * as eventQueries from '../db/queries/events.js';
 import * as metricsQueries from '../db/queries/metrics.js';
 import { taskId, projectId, eventId } from '../lib/id.js';
 import { addProjectToAOConfig } from '../services/ao-config.js';
+import { cloneRepo } from '../services/repo-clone.js';
 import {
   canTransition,
   checkGuard,
@@ -450,6 +451,26 @@ const taskRouter = router({
     }),
 });
 
+/** Parse GitHub URL into org/repo components. */
+function parseGithubUrl(url: string): { org: string; repo: string; orgRepo: string } {
+  const patterns = [
+    /^https?:\/\/github\.com\/([a-zA-Z0-9._-]+)\/([a-zA-Z0-9._-]+)/,
+    /^github\.com\/([a-zA-Z0-9._-]+)\/([a-zA-Z0-9._-]+)/,
+    /^git@github\.com:([a-zA-Z0-9._-]+)\/([a-zA-Z0-9._-]+)/,
+    /^([a-zA-Z0-9._-]+)\/([a-zA-Z0-9._-]+)$/,
+  ];
+
+  const trimmed = url.trim();
+  for (const pattern of patterns) {
+    const match = trimmed.match(pattern);
+    if (match?.[1] && match[2]) {
+      const repo = match[2].replace(/\.git$/, '');
+      return { org: match[1], repo, orgRepo: `${match[1]}/${repo}` };
+    }
+  }
+  throw new Error('Invalid GitHub URL. Use: org/repo, https://github.com/org/repo, or git@github.com:org/repo');
+}
+
 const projectRouter = router({
   list: publicProcedure.query(() => {
     return projectQueries.listProjects();
@@ -465,35 +486,63 @@ const projectRouter = router({
 
   create: publicProcedure
     .input(z.object({
-      name: z.string().min(1),
-      repo: z.string().min(1).regex(/^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/, 'Must be org/repo format'),
-      path: z.string().min(1),
-      default_branch: z.string().optional(),
+      githubUrl: z.string().min(1),
+      name: z.string().optional(),
+      defaultBranch: z.string().optional(),
     }))
-    .mutation(({ input }) => {
-      const id = projectId();
+    .mutation(async ({ input }) => {
+      const parsed = parseGithubUrl(input.githubUrl);
+
+      // Validate repo exists on GitHub
+      if (env.GITHUB_TOKEN) {
+        const checkRes = await fetch(`https://api.github.com/repos/${parsed.orgRepo}`, {
+          headers: { Authorization: `token ${env.GITHUB_TOKEN}`, 'User-Agent': 'cortex-v3' },
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (checkRes.status === 404) {
+          throw new Error('Repository not found on GitHub');
+        }
+      }
+
+      const projectSlug = parsed.repo;
+      const id = `prj_${parsed.repo.replace(/-/g, '_')}`;
+      const projectName = input.name || parsed.repo;
+
+      // Check for duplicate
+      if (projectQueries.getProject(id)) {
+        throw new Error(`Project "${projectName}" already exists`);
+      }
+
+      // Clone into Cortex's mount
+      const cortexClonePath = `${env.REPOS_CLONE_PATH}/${parsed.repo}`;
+      const { defaultBranch } = await cloneRepo(parsed.orgRepo, cortexClonePath);
+      const branch = input.defaultBranch || defaultBranch;
+
+      // Insert into DB
       const project = projectQueries.createProject({
         id,
-        name: input.name,
-        repo: input.repo,
-        path: input.path,
-        default_branch: input.default_branch,
+        name: projectName,
+        repo: parsed.orgRepo,
+        path: cortexClonePath,
+        default_branch: branch,
       });
 
-      // Write to AO config YAML
-      const key = input.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      // Add to AO config with AO's container path
+      const aoRepoPath = `${env.AO_REPOS_PATH}/${parsed.repo}`;
       try {
-        addProjectToAOConfig(key, {
-          name: input.name,
-          path: input.path,
-          repo: input.repo,
-          defaultBranch: input.default_branch ?? 'main',
+        addProjectToAOConfig(projectSlug, {
+          name: projectName,
+          path: aoRepoPath,
+          repo: parsed.orgRepo,
+          defaultBranch: branch,
+          agentConfig: { permissions: 'default' },
+          agentRules: 'Read CLAUDE.md if it exists.\nRun tests before committing.\nCommit with conventional commits.',
         });
       } catch {
         // Non-fatal — project created in DB even if YAML write fails
       }
 
-      return project;
+      return { ...project, aoRestartRequired: true };
     }),
 
   update: publicProcedure

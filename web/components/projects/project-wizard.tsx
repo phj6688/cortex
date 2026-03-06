@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Project wizard — paste GitHub URL → auto-parse → save in 30 seconds.
+ * Project wizard — paste GitHub URL → clone → ready for dispatch.
  * @module components/projects/project-wizard
  */
 
@@ -14,20 +14,20 @@ interface ProjectWizardProps {
   onCreated?: () => void;
 }
 
-function parseGitHubUrl(url: string): { repo: string; name: string } | null {
-  // Match: https://github.com/org/repo or github.com/org/repo or org/repo
+function parseGitHubUrl(url: string): { orgRepo: string; name: string } | null {
   const patterns = [
     /^https?:\/\/github\.com\/([a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+)/,
     /^github\.com\/([a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+)/,
+    /^git@github\.com:([a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+)/,
     /^([a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+)$/,
   ];
 
   for (const pattern of patterns) {
     const match = url.trim().match(pattern);
     if (match?.[1]) {
-      const repo = match[1].replace(/\.git$/, '');
-      const name = repo.split('/')[1] ?? repo;
-      return { repo, name };
+      const orgRepo = match[1].replace(/\.git$/, '');
+      const name = orgRepo.split('/')[1] ?? orgRepo;
+      return { orgRepo, name };
     }
   }
   return null;
@@ -36,37 +36,35 @@ function parseGitHubUrl(url: string): { repo: string; name: string } | null {
 export function ProjectWizard({ onClose, onCreated }: ProjectWizardProps) {
   const [url, setUrl] = useState('');
   const [name, setName] = useState('');
-  const [repo, setRepo] = useState('');
-  const [path, setPath] = useState('');
-  const [branch, setBranch] = useState('main');
-  const [parsed, setParsed] = useState(false);
+  const [branch, setBranch] = useState('');
+  const [preview, setPreview] = useState('');
 
   const createProject = trpc.project.create.useMutation();
 
-  const handlePaste = (value: string) => {
+  const handleInput = (value: string) => {
     setUrl(value);
     const result = parseGitHubUrl(value);
     if (result) {
-      setRepo(result.repo);
-      setName(result.name);
-      setPath(`~/${result.name}`);
-      setParsed(true);
+      setPreview(result.orgRepo);
+      if (!name) setName(result.name);
     } else {
-      setParsed(false);
+      setPreview('');
     }
   };
 
   const handleSubmit = async () => {
-    if (!name || !repo || !path) return;
+    if (!url.trim()) return;
 
     try {
-      await createProject.mutateAsync({
-        name,
-        repo,
-        path,
-        default_branch: branch,
+      const result = await createProject.mutateAsync({
+        githubUrl: url.trim(),
+        ...(name && { name }),
+        ...(branch && { defaultBranch: branch }),
       });
-      notify.success(`Project "${name}" created`);
+      notify.success(`Project "${result.name}" created`);
+      if (result.aoRestartRequired) {
+        notify.info('Restart AO to enable dispatch: docker compose restart agent-orchestrator');
+      }
       onCreated?.();
       onClose();
     } catch (err) {
@@ -74,7 +72,7 @@ export function ProjectWizard({ onClose, onCreated }: ProjectWizardProps) {
     }
   };
 
-  const canSubmit = name && repo && path && !createProject.isPending;
+  const canSubmit = url.trim().length > 0 && !createProject.isPending;
 
   return (
     <div
@@ -95,11 +93,10 @@ export function ProjectWizard({ onClose, onCreated }: ProjectWizardProps) {
           Add Project
         </h2>
         <p className="mt-1 text-xs" style={{ color: 'var(--text-secondary)' }}>
-          Paste a GitHub URL to auto-populate fields.
+          Paste a GitHub URL. The repo will be cloned automatically.
         </p>
 
         <div className="mt-4 space-y-3">
-          {/* URL paste */}
           <div>
             <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
               GitHub URL or org/repo
@@ -107,22 +104,21 @@ export function ProjectWizard({ onClose, onCreated }: ProjectWizardProps) {
             <input
               type="text"
               value={url}
-              onChange={(e) => handlePaste(e.target.value)}
+              onChange={(e) => handleInput(e.target.value)}
               placeholder="https://github.com/org/repo"
               autoFocus
               className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm outline-none"
               style={{ borderColor: 'var(--border)', color: 'var(--text-primary)', background: 'var(--bg-surface)' }}
             />
+            {preview && (
+              <p className="mt-1 text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                Will clone: {preview}
+              </p>
+            )}
           </div>
 
-          {parsed && (
-            <>
-              <Field label="Name" value={name} onChange={setName} />
-              <Field label="Repository (org/repo)" value={repo} onChange={setRepo} />
-              <Field label="Local path" value={path} onChange={setPath} />
-              <Field label="Default branch" value={branch} onChange={setBranch} />
-            </>
-          )}
+          <Field label="Project name (optional)" value={name} onChange={setName} placeholder="auto-detected from repo" />
+          <Field label="Branch (optional)" value={branch} onChange={setBranch} placeholder="auto-detected" />
         </div>
 
         <div className="mt-5 flex gap-2">
@@ -133,7 +129,7 @@ export function ProjectWizard({ onClose, onCreated }: ProjectWizardProps) {
             className="min-h-[44px] flex-1 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-40"
             style={{ background: 'var(--accent)', color: '#000' }}
           >
-            {createProject.isPending ? 'Creating...' : 'Create Project'}
+            {createProject.isPending ? 'Cloning repository...' : 'Add Project'}
           </button>
           <button
             type="button"
@@ -149,7 +145,7 @@ export function ProjectWizard({ onClose, onCreated }: ProjectWizardProps) {
   );
 }
 
-function Field({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
   return (
     <div>
       <label className="mb-1 block text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
@@ -159,6 +155,7 @@ function Field({ label, value, onChange }: { label: string; value: string; onCha
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
         className="min-h-[44px] w-full rounded-lg border px-3 py-2 text-sm outline-none"
         style={{ borderColor: 'var(--border)', color: 'var(--text-primary)', background: 'var(--bg-surface)' }}
       />

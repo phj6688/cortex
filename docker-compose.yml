@@ -9,12 +9,16 @@ services:
       AO_BASE_URL: http://agent-orchestrator:3000
       AO_CONFIG_PATH: /ao-config/agent-orchestrator.yaml
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      REPOS_CLONE_PATH: /repos
+      AO_REPOS_PATH: /home/ao-agent/repos
       PORT: "3481"
       NODE_ENV: production
       LOG_LEVEL: info
     volumes:
       - cortex-v3-data:/data
       - ./ao-config:/ao-config
+      - /home/lumo/repos:/repos
     depends_on:
       agent-orchestrator:
         condition: service_healthy
@@ -36,7 +40,7 @@ services:
       - ./ao-config/agent-orchestrator.yaml:/app/agent-orchestrator.yaml
       - ao-data:/home/ao-agent/.agent-orchestrator
       - ao-worktrees:/home/ao-agent/.worktrees
-      - /home/lumo/cortex-v3:/home/ao-agent/repos/cortex-v3
+      - /home/lumo/repos:/home/ao-agent/repos
       - /home/peyman/.claude:/tmp/claude-auth:ro
     restart: unless-stopped
     healthcheck:
