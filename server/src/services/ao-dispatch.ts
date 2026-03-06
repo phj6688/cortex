@@ -27,13 +27,33 @@ export interface AOSessionStatus {
   prUrl?: string;
 }
 
+interface ParsedBrief {
+  title: string;
+  objective: string;
+  acceptance_criteria: string[];
+  avoid_areas?: string[];
+}
+
 /**
- * Format a task brief for the agent.
- * @param brief - The refined brief text
- * @returns Formatted brief string
+ * Format a parsed brief into a markdown prompt for the agent.
  */
-function formatBriefForAgent(brief: string): string {
-  return brief.trim();
+function formatBriefAsPrompt(brief: ParsedBrief): string {
+  const lines: string[] = [
+    `# Task: ${brief.title}`,
+    '',
+    '## Objective',
+    brief.objective,
+    '',
+    '## Acceptance Criteria',
+    ...brief.acceptance_criteria.map((c: string) => `- ${c}`),
+  ];
+
+  if (brief.avoid_areas?.length) {
+    lines.push('', '## Avoid', ...brief.avoid_areas.map((a: string) => `- ${a}`));
+  }
+
+  lines.push('', 'Complete this task. Run tests. Commit and push when done.');
+  return lines.join('\n');
 }
 
 /**
@@ -82,38 +102,55 @@ export async function dispatch(task: TaskRow): Promise<DispatchResult> {
 
   log.info({ taskId: task.id, projectId: task.project_id, aoProjectId, aoBaseUrl }, 'dispatch: starting');
 
-  // v1 — HTTP (preferred)
+  // v1 — HTTP two-step: spawn session, then send brief
   if (aoBaseUrl) {
     try {
-      log.info({ taskId: task.id, url: `${aoBaseUrl}/api/spawn` }, 'dispatch: POST to AO spawn');
-      const res = await fetch(`${aoBaseUrl}/api/spawn`, {
+      // Step 1: Spawn session (no prompt — AO web route only accepts projectId/issueId)
+      log.info({ taskId: task.id, aoProjectId }, 'dispatch: spawning session');
+      const spawnRes = await fetch(`${aoBaseUrl}/api/spawn`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectId: aoProjectId,
-          prompt: formatBriefForAgent(task.brief!),
-        }),
+        body: JSON.stringify({ projectId: aoProjectId }),
         signal: AbortSignal.timeout(30_000),
       });
 
-      if (res.status === 404) {
+      if (spawnRes.status === 404) {
         log.warn({ taskId: task.id }, 'dispatch: AO /api/spawn returned 404, falling back to CLI');
         return dispatchCLI(task);
       }
 
-      if (!res.ok) {
-        const body = await res.text().catch(() => '');
-        log.error({ taskId: task.id, status: res.status, body }, 'dispatch: AO spawn failed');
-        throw new Error(`AO spawn failed: ${res.status} ${res.statusText}`);
+      if (!spawnRes.ok) {
+        const body = await spawnRes.text().catch(() => '');
+        log.error({ taskId: task.id, status: spawnRes.status, body }, 'dispatch: AO spawn failed');
+        throw new Error(`AO spawn failed: ${spawnRes.status} ${spawnRes.statusText}`);
       }
 
-      const data = (await res.json()) as AOSpawnResponse;
-      const result = {
-        sessionId: data.session?.id ?? task.id,
-        branch: data.session?.branch ?? `cortex/${task.id}`,
-      };
-      log.info({ taskId: task.id, sessionId: result.sessionId, branch: result.branch }, 'dispatch: success');
-      return result;
+      const data = (await spawnRes.json()) as AOSpawnResponse;
+      const sessionId = data.session?.id ?? task.id;
+      const branch = data.session?.branch ?? `cortex/${task.id}`;
+
+      log.info({ taskId: task.id, sessionId, branch }, 'dispatch: session spawned, sending brief');
+
+      // Step 2: Wait for agent to initialize, then send the task brief
+      await new Promise(resolve => setTimeout(resolve, 8_000));
+
+      const brief = JSON.parse(task.brief!) as ParsedBrief;
+      const prompt = formatBriefAsPrompt(brief);
+
+      const sendRes = await fetch(`${aoBaseUrl}/api/sessions/${sessionId}/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: prompt }),
+        signal: AbortSignal.timeout(10_000),
+      });
+
+      if (!sendRes.ok) {
+        log.warn({ taskId: task.id, sessionId, status: sendRes.status }, 'dispatch: failed to send brief (non-fatal)');
+      } else {
+        log.info({ taskId: task.id, sessionId }, 'dispatch: brief sent to agent');
+      }
+
+      return { sessionId, branch };
     } catch (err) {
       if (err instanceof DOMException && err.name === 'TimeoutError') {
         log.error({ taskId: task.id }, 'dispatch: AO spawn timed out after 30s');
