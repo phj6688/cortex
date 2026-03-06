@@ -7,14 +7,16 @@
  */
 
 import { useState, useCallback, useRef, type MutableRefObject } from 'react';
-import { toast } from 'sonner';
+import * as notify from '../../lib/notify';
 import { ChatInput } from '../brief/chat-input';
 import { RefinementStream } from '../brief/refinement-stream';
 import { BriefCard } from '../brief/brief-card';
 import { BriefEditor } from '../brief/brief-editor';
 import { ProjectSelector } from '../brief/project-selector';
 import { SignOffButton } from '../brief/sign-off-button';
+import { QuestionList } from '../brief/question-list';
 import { EmptyState } from '../shared/empty-state';
+import { BriefPanelSkeleton } from '../layout/skeleton';
 import { streamBriefRefinement, type BriefContent, type BriefCompletePayload } from '../../lib/api';
 import { trpc } from '../../lib/trpc';
 
@@ -113,19 +115,16 @@ export function BriefPanel({ chatInputRef }: BriefPanelProps) {
     setPhase('input');
   };
 
-  const handleAnswerSubmit = () => {
-    const currentAnswer = input.trim();
-    if (!currentAnswer) return;
-    const newAnswers = [...answers, currentAnswer];
-    setAnswers(newAnswers);
-    setInput('');
-    startStream(input, newAnswers);
+  const handleAnswersSubmit = (submittedAnswers: string[]) => {
+    setAnswers(submittedAnswers);
+    const formatted = questions
+      .map((q, i) => `Q: ${q}\nA: ${submittedAnswers[i]}`)
+      .join('\n\n');
+    startStream(`${originalInput}\n\n${formatted}`, submittedAnswers);
   };
 
-  const handleEditorSave = (edited: BriefContent) => {
-    setBrief(edited);
-    setPhase('brief');
-  };
+  const handleSkipQuestions = () => setPhase('editing');
+  const handleEditorSave = (edited: BriefContent) => { setBrief(edited); setPhase('brief'); };
 
   const handleSignOff = async () => {
     if (!brief) return;
@@ -157,29 +156,20 @@ export function BriefPanel({ chatInputRef }: BriefPanelProps) {
 
       await approveTask.mutateAsync({ id: task.id });
 
-      toast.success('Signed off — task approved');
+      notify.success('Signed off — task approved');
       setPhase('signed-off');
     } catch (err) {
       // Failure case #3: SSE disconnect during sign-off
-      toast.error('Sign-off failed — try again');
+      notify.error('Sign-off failed — try again');
       setError((err as Error).message);
     }
   };
 
   const handleReset = () => {
-    setPhase('input');
-    setInput('');
-    setOriginalInput('');
-    setTokens('');
-    setWarning(null);
-    setQuestions([]);
-    setAnswers([]);
-    setBrief(null);
-    setProjectId(null);
-    setError(null);
-    setNoProjectWarning(false);
-    abortRef.current?.abort();
-    abortRef.current = null;
+    setPhase('input'); setInput(''); setOriginalInput(''); setTokens('');
+    setWarning(null); setQuestions([]); setAnswers([]); setBrief(null);
+    setProjectId(null); setError(null); setNoProjectWarning(false);
+    abortRef.current?.abort(); abortRef.current = null;
   };
 
   return (
@@ -221,7 +211,11 @@ export function BriefPanel({ chatInputRef }: BriefPanelProps) {
 
       {phase === 'streaming' && (
         <>
-          <RefinementStream tokens={tokens} isStreaming warning={warning} />
+          {tokens.length === 0 ? (
+            <BriefPanelSkeleton />
+          ) : (
+            <RefinementStream tokens={tokens} isStreaming warning={warning} />
+          )}
           <ChatInput
             value={input}
             onChange={setInput}
@@ -234,32 +228,16 @@ export function BriefPanel({ chatInputRef }: BriefPanelProps) {
       )}
 
       {phase === 'questions' && (
-        <>
-          <div className="mt-3 space-y-2">
-            {questions.map((q) => (
-              <div
-                key={q}
-                className="rounded-lg border p-3 text-sm"
-                style={{ borderColor: 'var(--border)', color: 'var(--text-brief)' }}
-              >
-                {q}
-              </div>
-            ))}
-          </div>
-          <div className="mt-3">
-            <ChatInput
-              value={input}
-              onChange={setInput}
-              onSubmit={handleAnswerSubmit}
-              placeholder="Answer the question above..."
-            />
-          </div>
-        </>
+        <QuestionList
+          questions={questions}
+          onSubmit={handleAnswersSubmit}
+          onSkip={handleSkipQuestions}
+        />
       )}
 
       {phase === 'brief' && brief && (
         <>
-          <BriefCard brief={brief} />
+          <BriefCard brief={brief} onBriefChange={setBrief} />
           <ProjectSelector value={projectId} onChange={(id) => { setProjectId(id); setNoProjectWarning(false); }} />
 
           {/* Failure case #5: no project warning */}
@@ -269,15 +247,7 @@ export function BriefPanel({ chatInputRef }: BriefPanelProps) {
             </p>
           )}
 
-          <div className="mt-2 flex gap-2">
-            <button
-              type="button"
-              onClick={() => setPhase('editing')}
-              className="min-h-[44px] rounded border px-3 py-1 text-xs"
-              style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)' }}
-            >
-              Edit
-            </button>
+          <div className="mt-2">
             <button
               type="button"
               onClick={handleReset}
@@ -308,8 +278,8 @@ export function BriefPanel({ chatInputRef }: BriefPanelProps) {
             className="rounded-lg p-4"
             style={{ background: 'var(--accent-glow)', color: 'var(--accent-dim)' }}
           >
-            <p className="text-sm font-semibold">Signed off — queued for approval</p>
-            <p className="mt-1 text-xs">Task is now pending_approval</p>
+            <p className="text-sm font-semibold">Signed off — task approved</p>
+            <p className="mt-1 text-xs">Task is dispatching to agent</p>
           </div>
           <button
             type="button"

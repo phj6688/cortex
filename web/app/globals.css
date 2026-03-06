@@ -68,9 +68,35 @@ body {
   animation: pulse-glow 2s ease-in-out infinite;
 }
 
-/* Responsive: 1024px minimum, scale to 2560px */
-@media (max-width: 1024px) {
-  .brief-panel { min-width: 320px; }
+/* Responsive: brief panel collapses below 1024px */
+@media (max-width: 1023px) {
+  .app-grid {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: 1fr auto;
+  }
+  .app-grid > .brief-panel {
+    order: 2;
+    min-width: unset;
+    max-height: 40vh;
+    border-top: 1px solid var(--border);
+  }
+  .app-grid > .mission-panel {
+    order: 1;
+  }
+}
+
+/* Mobile: full-screen panels */
+@media (max-width: 640px) {
+  .app-grid > .brief-panel {
+    max-height: 50vh;
+  }
+  .task-detail-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background: var(--bg-primary);
+    overflow-y: auto;
+  }
 }
 
 /* cmdk overrides */
@@ -79,4 +105,12 @@ body {
 }
 [cmdk-item][data-selected='true'] {
   background: rgba(255, 255, 255, 0.05);
+}
+
+/* Toast accents */
+.toast-success {
+  border-left: 3px solid var(--success) !important;
+}
+.toast-error {
+  border-left: 3px solid var(--danger) !important;
 }

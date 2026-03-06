@@ -15,9 +15,10 @@ interface CommandBarProps {
   onFocusChatInput: () => void;
   onToggleShortcuts: () => void;
   onOpenProjectWizard?: () => void;
+  onManageProjects?: () => void;
 }
 
-export function CommandBar({ open, onClose, onFocusChatInput, onToggleShortcuts, onOpenProjectWizard }: CommandBarProps) {
+export function CommandBar({ open, onClose, onFocusChatInput, onToggleShortcuts, onOpenProjectWizard, onManageProjects }: CommandBarProps) {
   const toggleAoFullscreen = useUIStore((s) => s.toggleAoFullscreen);
   const setFilter = useUIStore((s) => s.setFilter);
   const selectedTaskId = useUIStore((s) => s.selectedTaskId);
@@ -95,6 +96,12 @@ export function CommandBar({ open, onClose, onFocusChatInput, onToggleShortcuts,
             >
               Toggle AO Dashboard
             </CommandItem>
+
+            {onManageProjects && (
+              <CommandItem onSelect={() => run(onManageProjects)} shortcut="P">
+                Manage Projects
+              </CommandItem>
+            )}
 
             {onOpenProjectWizard && (
               <CommandItem onSelect={() => run(onOpenProjectWizard)}>

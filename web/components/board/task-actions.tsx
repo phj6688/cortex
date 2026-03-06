@@ -1,36 +1,27 @@
 'use client';
 
 /**
- * Context menu for task actions: retry, sleep, edit brief, CI actions, kill.
+ * Context menu for task actions: approve, retry, sleep/wake, kill, delete, copy ID.
  * @module components/board/task-actions
  */
 
 import { useState, useRef, useEffect } from 'react';
-import { toast } from 'sonner';
+import * as notify from '../../lib/notify';
 import { trpc } from '../../lib/trpc';
-import type { Task, TaskState } from '../../stores/task-store';
+import type { Task } from '../../stores/task-store';
 
 interface TaskActionsProps {
   task: Task;
+  onDeleted?: () => void;
 }
 
-interface StateAction {
-  type: 'state';
-  label: string;
-  newState: TaskState;
-  condition: boolean;
-  color?: string;
-}
-
-interface CustomAction {
-  type: 'custom';
+interface MenuItem {
   label: string;
   condition: boolean;
   color?: string;
+  danger?: boolean;
   onClick: () => void;
 }
-
-type Action = StateAction | CustomAction;
 
 /**
  * Check if a failure reason indicates a CI/test failure.
@@ -43,28 +34,39 @@ function isCIFailure(reason: string | null): boolean {
   return lower.includes('ci') || lower.includes('test');
 }
 
-/**
- * Check if a failure reason indicates a stuck session.
- * @param reason - The failure reason string
- * @returns Whether the failure is stuck-related
- */
-function isStuckFailure(reason: string | null): boolean {
-  if (!reason) return false;
-  return reason.toLowerCase().includes('stuck');
-}
-
-export function TaskActions({ task }: TaskActionsProps) {
+export function TaskActions({ task, onDeleted }: TaskActionsProps) {
   const [open, setOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const updateState = trpc.task.updateState.useMutation();
+  const utils = trpc.useUtils();
+
+  const updateState = trpc.task.updateState.useMutation({
+    onSuccess: () => { utils.task.list.invalidate(); },
+  });
+  const approve = trpc.task.approve.useMutation({
+    onSuccess: () => { utils.task.list.invalidate(); notify.success('Task approved'); },
+    onError: (err) => notify.error(`Approve failed: ${err.message}`),
+  });
   const sendFix = trpc.task.sendFix.useMutation();
-  const killSession = trpc.task.killSession.useMutation();
+  const killSession = trpc.task.killSession.useMutation({
+    onSuccess: () => { utils.task.list.invalidate(); notify.success('Session killed'); },
+    onError: (err) => notify.error(`Kill failed: ${err.message}`),
+  });
+  const deleteTask = trpc.task.delete.useMutation({
+    onSuccess: () => {
+      utils.task.list.invalidate();
+      notify.success('Task deleted');
+      onDeleted?.();
+    },
+    onError: (err) => notify.error(`Delete failed: ${err.message}`),
+  });
 
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setOpen(false);
+        setConfirmDelete(false);
       }
     };
     document.addEventListener('mousedown', handler);
@@ -72,116 +74,115 @@ export function TaskActions({ task }: TaskActionsProps) {
   }, [open]);
 
   const ciFailure = task.state === 'failed' && isCIFailure(task.failure_reason);
-  const stuckFailure = task.state === 'failed' && isStuckFailure(task.failure_reason);
+  const canKill = ['running', 'dispatched'].includes(task.state) && !!task.ao_session_id;
+  const canDelete = ['draft', 'failed', 'done', 'sleeping'].includes(task.state);
 
-  const actions: Action[] = [
+  const items: MenuItem[] = [
     {
-      type: 'state',
+      label: 'Approve',
+      condition: task.state === 'pending_approval',
+      onClick: () => { setOpen(false); approve.mutate({ id: task.id }); },
+    },
+    {
       label: 'Retry',
-      newState: 'draft',
       condition: task.state === 'failed',
+      onClick: () => { setOpen(false); updateState.mutate({ id: task.id, state: 'draft' }); },
     },
     {
-      type: 'state',
       label: 'Sleep',
-      newState: 'sleeping',
       condition: ['draft', 'refined', 'pending_approval', 'running'].includes(task.state),
+      onClick: () => { setOpen(false); updateState.mutate({ id: task.id, state: 'sleeping' }); },
     },
     {
-      type: 'state',
       label: 'Wake',
-      newState: 'draft',
       condition: task.state === 'sleeping',
+      onClick: () => { setOpen(false); updateState.mutate({ id: task.id, state: 'draft' }); },
     },
     {
-      type: 'state',
       label: 'Back to Draft',
-      newState: 'draft',
       condition: ['refined', 'pending_approval', 'approved'].includes(task.state),
+      onClick: () => { setOpen(false); updateState.mutate({ id: task.id, state: 'draft' }); },
     },
     {
-      type: 'custom',
-      label: 'View Logs',
-      condition: ciFailure,
-      onClick: () => {
-        if (task.ao_pr_url) {
-          window.open(task.ao_pr_url, '_blank', 'noopener');
-        } else {
-          toast.error('No CI logs available');
-        }
-        setOpen(false);
-      },
-    },
-    {
-      type: 'custom',
       label: 'Send Fix to Agent',
       condition: ciFailure && !!task.ao_session_id,
       onClick: () => {
         setOpen(false);
         sendFix.mutate({ id: task.id }, {
-          onSuccess: () => toast.success('Fix instruction sent to agent'),
-          onError: (err) => toast.error(`Send fix failed: ${err.message}`),
+          onSuccess: () => notify.success('Fix instruction sent'),
+          onError: (err) => notify.error(`Send fix failed: ${err.message}`),
         });
       },
     },
     {
-      type: 'custom',
       label: 'Kill Session',
-      condition: stuckFailure && !!task.ao_session_id,
-      color: '#ef4444',
+      condition: canKill,
+      color: 'var(--danger)',
+      onClick: () => { setOpen(false); killSession.mutate({ id: task.id }); },
+    },
+    {
+      label: 'Copy Task ID',
+      condition: true,
       onClick: () => {
+        navigator.clipboard.writeText(task.id);
+        notify.success('Copied');
         setOpen(false);
-        killSession.mutate({ id: task.id }, {
-          onSuccess: () => toast.success('Session killed'),
-          onError: (err) => toast.error(`Kill failed: ${err.message}`),
-        });
+      },
+    },
+    {
+      label: confirmDelete ? 'Confirm Delete' : 'Delete',
+      condition: canDelete,
+      danger: true,
+      color: 'var(--danger)',
+      onClick: () => {
+        if (!confirmDelete) {
+          setConfirmDelete(true);
+          return;
+        }
+        setOpen(false);
+        setConfirmDelete(false);
+        deleteTask.mutate({ id: task.id });
       },
     },
   ];
 
-  const availableActions = actions.filter((a) => a.condition);
-
-  if (availableActions.length === 0) return null;
-
-  const handleAction = async (action: Action) => {
-    if (action.type === 'custom') {
-      action.onClick();
-    } else {
-      setOpen(false);
-      await updateState.mutateAsync({ id: task.id, state: action.newState });
-    }
-  };
+  const visible = items.filter((i) => i.condition);
 
   return (
     <div className="relative" ref={menuRef}>
       <button
         type="button"
-        onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+        onClick={(e) => { e.stopPropagation(); setOpen(!open); setConfirmDelete(false); }}
         className="rounded px-1.5 py-0.5 text-xs transition-colors hover:bg-white/10"
         style={{ color: 'var(--text-secondary)' }}
+        title="Task actions"
       >
-        ...
+        {'\u22EF'}
       </button>
 
       {open && (
         <div
-          className="absolute right-0 top-full z-10 mt-1 min-w-[140px] rounded-lg border py-1"
+          className="absolute right-0 top-full z-10 mt-1 min-w-[160px] rounded-lg border py-1"
           style={{
             background: 'var(--bg-elevated)',
             borderColor: 'var(--border)',
-            boxShadow: 'var(--shadow-card)',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
           }}
         >
-          {availableActions.map((action) => (
-            <button
-              key={action.label}
-              type="button"
-              onClick={(e) => { e.stopPropagation(); handleAction(action); }}
-              className="w-full px-3 py-1.5 text-left text-xs transition-colors hover:bg-white/5"
-              style={{ color: action.color ?? 'var(--text-primary)' }}
-            >
-              {action.label}
-            </button>
+          {visible.map((item, i) => (
+            <div key={item.label}>
+              {item.danger && i > 0 && (
+                <div className="my-1 border-t" style={{ borderColor: 'var(--border)' }} />
+              )}
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); item.onClick(); }}
+                className="w-full px-3 py-1.5 text-left text-xs transition-colors hover:bg-white/5"
+                style={{ color: item.color ?? 'var(--text-primary)' }}
+              >
+                {item.label}
+              </button>
+            </div>
           ))}
         </div>
       )}

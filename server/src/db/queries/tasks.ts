@@ -165,3 +165,14 @@ export function updateTask(
   stmt.run(...values);
   return getTask(id);
 }
+
+/**
+ * Delete a task and its related events.
+ * @param id - Task ID
+ * @returns void
+ */
+export function deleteTask(id: string): void {
+  const db = getDb();
+  db.prepare('DELETE FROM events WHERE task_id = ?').run(id);
+  db.prepare('DELETE FROM tasks WHERE id = ?').run(id);
+}

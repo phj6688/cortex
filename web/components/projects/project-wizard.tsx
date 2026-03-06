@@ -6,7 +6,7 @@
  */
 
 import { useState } from 'react';
-import { toast } from 'sonner';
+import * as notify from '../../lib/notify';
 import { trpc } from '../../lib/trpc';
 
 interface ProjectWizardProps {
@@ -66,11 +66,11 @@ export function ProjectWizard({ onClose, onCreated }: ProjectWizardProps) {
         path,
         default_branch: branch,
       });
-      toast.success(`Project "${name}" created`);
+      notify.success(`Project "${name}" created`);
       onCreated?.();
       onClose();
     } catch (err) {
-      toast.error((err as Error).message);
+      notify.error((err as Error).message);
     }
   };
 

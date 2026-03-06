@@ -411,6 +411,22 @@ const taskRouter = router({
       publishTaskStateChanged(input.id, task.state, 'failed');
       return updated;
     }),
+
+  delete: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(({ input }) => {
+      const task = taskQueries.getTask(input.id);
+      if (!task) throw new Error('Task not found');
+      const deletable: TaskState[] = ['draft', 'failed', 'done', 'sleeping'];
+      if (!deletable.includes(task.state)) {
+        throw new Error(`Cannot delete task in state: ${task.state}`);
+      }
+      if (task.project_id) {
+        projectQueries.decrementTaskCount(task.project_id);
+      }
+      taskQueries.deleteTask(input.id);
+      return { ok: true };
+    }),
 });
 
 const projectRouter = router({
@@ -457,6 +473,39 @@ const projectRouter = router({
       }
 
       return project;
+    }),
+
+  update: publicProcedure
+    .input(z.object({
+      id: z.string(),
+      name: z.string().min(1).optional(),
+      repo: z.string().min(1).regex(/^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/, 'Must be org/repo format').optional(),
+      path: z.string().min(1).optional(),
+      default_branch: z.string().optional(),
+    }))
+    .mutation(({ input }) => {
+      const project = projectQueries.getProject(input.id);
+      if (!project) throw new Error('Project not found');
+      const updated = projectQueries.updateProject(input.id, {
+        name: input.name,
+        repo: input.repo,
+        path: input.path,
+        default_branch: input.default_branch,
+      });
+      return updated!;
+    }),
+
+  delete: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(({ input }) => {
+      const project = projectQueries.getProject(input.id);
+      if (!project) throw new Error('Project not found');
+      const activeCount = projectQueries.countActiveTasksForProject(input.id);
+      if (activeCount > 0) {
+        throw new Error(`Project has ${activeCount} active task${activeCount > 1 ? 's' : ''}. Archive or complete them first.`);
+      }
+      projectQueries.deleteProject(input.id);
+      return { ok: true };
     }),
 });
 

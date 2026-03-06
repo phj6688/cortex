@@ -6,7 +6,7 @@
  */
 
 import { useState } from 'react';
-import { toast } from 'sonner';
+import * as notify from '../../lib/notify';
 import { trpc } from '../../lib/trpc';
 
 interface SessionActionsProps {
@@ -26,27 +26,27 @@ export function SessionActions({ session }: SessionActionsProps) {
 
   const retryMutation = trpc.task.retrySession.useMutation({
     onSuccess: () => {
-      toast.success('Session queued for retry');
+      notify.success('Session queued for retry');
       utils.task.sessions.invalidate({ taskId: session.task_id });
     },
-    onError: (err) => toast.error(err.message),
+    onError: (err) => notify.error(err.message),
   });
 
   const skipMutation = trpc.task.skipSession.useMutation({
     onSuccess: () => {
-      toast.success('Session skipped');
+      notify.success('Session skipped');
       utils.task.sessions.invalidate({ taskId: session.task_id });
     },
-    onError: (err) => toast.error(err.message),
+    onError: (err) => notify.error(err.message),
   });
 
   const editMutation = trpc.task.updateSessionPrompt.useMutation({
     onSuccess: () => {
-      toast.success('Session prompt updated');
+      notify.success('Session prompt updated');
       setEditing(false);
       utils.task.sessions.invalidate({ taskId: session.task_id });
     },
-    onError: (err) => toast.error(err.message),
+    onError: (err) => notify.error(err.message),
   });
 
   const canRetry = session.state === 'failed' && session.retry_count < 2;

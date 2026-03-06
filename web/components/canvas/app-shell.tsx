@@ -6,7 +6,8 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Toaster, toast } from 'sonner';
+import { Toaster } from 'sonner';
+import * as notify from '../../lib/notify';
 import { BriefPanel } from './brief-panel';
 import { MissionBoard } from './mission-board';
 import { CommandBar } from './command-bar';
@@ -14,14 +15,20 @@ import { TopBar } from '../layout/top-bar';
 import { ShortcutsOverlay } from '../layout/shortcuts-overlay';
 import { ErrorBoundary } from '../shared/error-boundary';
 import { ProjectWizard } from '../projects/project-wizard';
+import { ProjectListPanel } from '../projects/project-list-panel';
 import { useKeyboard } from '../../hooks/use-keyboard';
 import { useConnectionStore } from '../../stores/connection-store';
+import { usePageTitle } from '../../hooks/use-page-title';
 
 export function AppShell() {
   const [commandBarOpen, setCommandBarOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [projectWizardOpen, setProjectWizardOpen] = useState(false);
+  const [projectListOpen, setProjectListOpen] = useState(false);
+  const [highlightProjectId, setHighlightProjectId] = useState<string | null>(null);
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
+
+  usePageTitle();
 
   // Register service worker
   useEffect(() => {
@@ -35,7 +42,7 @@ export function AppShell() {
   const status = useConnectionStore((s) => s.status);
   useEffect(() => {
     if (status === 'reconnecting' && prevStatus.current === 'connected') {
-      toast.warning('Connection lost — action may not have saved');
+      notify.warn('Connection lost — action may not have saved');
     }
     prevStatus.current = status;
   }, [status]);
@@ -65,23 +72,27 @@ export function AppShell() {
             border: '1px solid var(--border)',
             fontFamily: 'var(--font-sans)',
           },
+          classNames: {
+            success: 'toast-success',
+            error: 'toast-error',
+          },
         }}
       />
 
       <div className="flex h-screen w-screen flex-col overflow-hidden">
         <TopBar />
-        <div className="grid flex-1 overflow-hidden" style={{ gridTemplateColumns: '40% 60%' }}>
-          {/* LEFT: Brief Panel — 40% */}
+        <div className="app-grid grid flex-1 overflow-hidden" style={{ gridTemplateColumns: '40% 60%' }}>
+          {/* LEFT: Brief Panel */}
           <ErrorBoundary fallbackTitle="Brief panel error">
-            <div className="min-w-[360px] overflow-y-auto brief-panel">
+            <div className="brief-panel min-w-[360px] overflow-y-auto">
               <BriefPanel chatInputRef={chatInputRef} />
             </div>
           </ErrorBoundary>
 
-          {/* RIGHT: Mission Board — 60% */}
+          {/* RIGHT: Mission Board */}
           <ErrorBoundary fallbackTitle="Mission board error">
-            <div className="overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
-              <MissionBoard />
+            <div className="mission-panel overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
+              <MissionBoard onFocusChatInput={focusChatInput} />
             </div>
           </ErrorBoundary>
         </div>
@@ -93,6 +104,7 @@ export function AppShell() {
         onFocusChatInput={focusChatInput}
         onToggleShortcuts={toggleShortcuts}
         onOpenProjectWizard={() => setProjectWizardOpen(true)}
+        onManageProjects={() => setProjectListOpen(true)}
       />
 
       <ShortcutsOverlay
@@ -101,7 +113,21 @@ export function AppShell() {
       />
 
       {projectWizardOpen && (
-        <ProjectWizard onClose={() => setProjectWizardOpen(false)} />
+        <ProjectWizard
+          onClose={() => setProjectWizardOpen(false)}
+          onCreated={() => {
+            setProjectWizardOpen(false);
+            setProjectListOpen(true);
+          }}
+        />
+      )}
+
+      {projectListOpen && (
+        <ProjectListPanel
+          onClose={() => { setProjectListOpen(false); setHighlightProjectId(null); }}
+          onAddProject={() => { setProjectListOpen(false); setProjectWizardOpen(true); }}
+          highlightId={highlightProjectId}
+        />
       )}
     </>
   );

@@ -28,7 +28,11 @@ const SORTS: { value: SortValue; label: string }[] = [
   { value: 'state',    label: 'State' },
 ];
 
-export function MissionBoard() {
+interface MissionBoardProps {
+  onFocusChatInput?: () => void;
+}
+
+export function MissionBoard({ onFocusChatInput }: MissionBoardProps) {
   const { isLoading } = useTasks();
 
   const tasks = useTaskStore((s) => s.tasks);
@@ -99,7 +103,7 @@ export function MissionBoard() {
                 <TaskDetail />
               </div>
             ) : (
-              <TaskList key="list" />
+              <TaskList key="list" onFocusChatInput={onFocusChatInput} />
             )}
           </AnimatePresence>
         )}

@@ -36,7 +36,14 @@ export function SignOffButton({ disabled = false, onSignOff }: SignOffButtonProp
         boxShadow: disabled || loading ? 'none' : 'var(--shadow-glow)',
       }}
     >
-      {loading ? 'Signing off...' : 'Sign Off & Queue'}
+      {loading ? (
+        <span className="inline-flex items-center gap-2">
+          <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          Signing off...
+        </span>
+      ) : (
+        'Sign Off & Queue'
+      )}
     </button>
   );
 }
