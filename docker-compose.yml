@@ -31,7 +31,7 @@ services:
       dockerfile: Dockerfile
     ports: ["3100:3000"]
     environment:
-      CLAUDE_SETUP_TOKEN: ${CLAUDE_SETUP_TOKEN}
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN}
       GITHUB_TOKEN: ${GITHUB_TOKEN}
     volumes:
       - ./ao-config/agent-orchestrator.yaml:/app/agent-orchestrator.yaml

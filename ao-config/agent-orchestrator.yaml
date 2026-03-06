@@ -14,6 +14,8 @@ projects:
     path: /root/repos/homelab-ops
     repo: phj6688/homelab-ops
     defaultBranch: main
+    agentConfig:
+      permissions: default
     agentRules: |
       This is an operations/infrastructure task, not feature development.
       Do not open a PR unless explicitly asked.
@@ -24,11 +26,19 @@ projects:
     path: /root/repos/cortex-v3
     repo: phj6688/cortex
     defaultBranch: master
+    agentConfig:
+      permissions: default
     agentRules: |
-      This is the Cortex V3 AI task delegation app.
-      Read CLAUDE.md for coding standards.
-      TypeScript strict. No any. No ts-ignore.
-      Run pnpm typecheck before committing.
+      Read CLAUDE.md in the project root first.
+      TypeScript strict mode. No any. No ts-ignore.
+      Run pnpm typecheck after every change. Zero errors required.
+      Run pnpm test before committing. Zero failures required.
+      Use prepared statements for all SQL queries.
+      State transitions must go through task-machine.ts.
+      Every DB mutation writes to events table.
+      SSE routes use reply.hijack() — add CORS headers manually.
+      Commit with conventional commits: feat:, fix:, refactor:
+      Push to the session branch when done.
 
 notifiers:
   webhook:
